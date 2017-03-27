@@ -57,3 +57,21 @@ func Example_dottedNames() {
 	t.Render(os.Stdout, "main", data)
 	// "Joe"
 }
+
+// Structs used as template data will have their exported fields and methods
+// available in the template. Unexported fields and methods are not available
+// to the template.
+func Example_dataStruct() {
+	data := struct {
+		Name string
+		age  int
+	}{
+		Name: "John",
+		age:  31,
+	}
+
+	t := mustache.NewTemplate()
+	t.ParseString("main", `My name is {{Name}}, and I am {{age}} years old.`)
+	t.Render(os.Stdout, "main", data)
+	// "My name is John, and I am years old"
+}

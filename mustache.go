@@ -27,7 +27,8 @@ func NewTemplate() *Template {
 
 // Parse parses the mustache input as a named partial. Base (or root) templates,
 // as well as partials, are all considered 'partials' by this library, and must
-// each be added via the Parse method. Partial names must be alphanumeric.
+// each be added via the Parse method. Partial names must be alphanumeric. If an
+// error is returned, the mustache source has not been added to the template.
 func (t *Template) Parse(name string, r io.Reader) error {
 	tokenReader := token.NewReader("", r, token.DefaultLeftDelim, token.DefaultRightDelim)
 	tree, err := parse.Parse(tokenReader)

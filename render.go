@@ -22,13 +22,17 @@ import (
 // occuring on the 0'th item first, moving sequenentially to the N'th item, until
 // a match is found.
 //
-// If an error is returned, it will describe the first error that occured
-// during the rendering process. Errors consist of context lookup misses, unknown
-// partials, or parsing errors in the case of lambda functions.
+// An error returned by this function should be considered a 'warning' rather
+// than a true error, since the occurrence of an error will not halt the
+// rendering process. When an error is returned, it represents the first
+// occurrence of an error during the rendering process, and all subsequent errors
+// after the first are ignored. Errors can consist of context lookup misses,
+// unknown partials, or in the case of lambda functions, parsing errors.
 //
-// Render always produces a fully rendered template, regardless of if an error
-// has been returned or not. As per the mustache spec, context misses, unknown
-// partials, and unparsable lambdas are all considered falsey values.
+// The Render function will always produce a fully rendered template, whether
+// an error has been returned or not. As per the mustache spec, context misses,
+// unknown partials, and unparsable lambdas are all considered falsey values,
+// and are generally rendered as an empty string.
 func (t *Template) Render(w io.Writer, name string, ctx ...interface{}) error {
 	// reverse data stack args
 	rctx := []interface{}{}
