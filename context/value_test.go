@@ -27,17 +27,9 @@ func TestValue_String(t *testing.T) {
 		t.Errorf("got %s, expected %s", got, expect)
 	}
 
-	// arity 0 lambda
-	lambda0 := func() string { return "hello world" }
+	// non lambda function
+	lambda0 := func() int { return 23 }
 	got = Value{reflect.ValueOf(lambda0)}.String()
-	expect = "hello world"
-	if got != expect {
-		t.Errorf("got %s, expected %s", got, expect)
-	}
-
-	// non arity 0 function
-	lambda1 := func(v string) string { return "hello world" }
-	got = Value{reflect.ValueOf(lambda1)}.String()
 	expect = ""
 	if got != expect {
 		t.Errorf("got %s, expected %s", got, expect)

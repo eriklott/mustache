@@ -7,6 +7,14 @@ Package mustache is a full implementation of the mustache template language. For
 more information on the mustache spec, refer to the mustache manual at
 https://mustache.github.io/mustache.5.html
 
+Mustache Spec Compliance
+This mustache implementation complies with 100% of the mustache specs, including
+lambda specs.
+
+Documentation
+
+
+
 Templates And Partials
 
 Templates and partials are both considered 'partials' by this library. Both

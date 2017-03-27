@@ -10,10 +10,10 @@ import (
 	"io"
 	"strings"
 
-	"github.com/mreriklott/mustache/context"
-	"github.com/mreriklott/mustache/parse"
-	"github.com/mreriklott/mustache/token"
-	"github.com/mreriklott/mustache/writer"
+	"github.com/eriklott/mustache/context"
+	"github.com/eriklott/mustache/parse"
+	"github.com/eriklott/mustache/token"
+	"github.com/eriklott/mustache/writer"
 )
 
 // Render fetches a template/partial by name, applies it to the specified
@@ -46,10 +46,12 @@ func (t *Template) Render(w io.Writer, name string, ctx ...interface{}) error {
 
 func (t *Template) renderPartial(w writer.Writer, stack *context.Stack, name string) {
 	tree, ok := t.treeMap[name]
-	if !ok {
+	if ok {
+		t.walk(w, stack, tree)
+	} else {
 		t.handleErr(fmt.Errorf("template/partial %s not found", name))
 	}
-	t.walk(w, stack, tree)
+
 }
 
 func (t *Template) renderString(w writer.Writer, stack *context.Stack, src, ldelim, rdelim string) error {

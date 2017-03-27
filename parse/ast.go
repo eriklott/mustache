@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/mreriklott/mustache/token"
+	"github.com/eriklott/mustache/token"
 )
 
 // Node represents a node in the parse tree.

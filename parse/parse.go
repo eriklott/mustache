@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/mreriklott/mustache/token"
+	"github.com/eriklott/mustache/token"
 )
 
 func Parse(r token.Reader) (tree *Tree, err error) {

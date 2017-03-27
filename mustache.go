@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/mreriklott/mustache/parse"
-	"github.com/mreriklott/mustache/token"
+	"github.com/eriklott/mustache/parse"
+	"github.com/eriklott/mustache/token"
 )
 
 // Template is the representation of a parsed mustache template.

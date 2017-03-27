@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mreriklott/mustache/token"
+	"github.com/eriklott/mustache/token"
 )
 
 type parseTest struct {
