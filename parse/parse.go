@@ -1,3 +1,7 @@
+// Copyright 2017 Erik Lott. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
 package parse
 
 import (
@@ -44,7 +48,7 @@ func parseSections(nodes []Node) []Node {
 			section := openSections[len(openSections)-1]
 			if sectionEnd, ok := node.(*SectionEndTag); ok {
 				if section.Key != sectionEnd.Key {
-					parseError(fmt.Errorf("%s unexpected unopenned section tag '%s' in input", sectionEnd.Pos, sectionEnd.Key))
+					parseError(fmt.Errorf("%s unexpected unopened section tag '%s' in input", sectionEnd.Pos, sectionEnd.Key))
 				}
 				section.EndTag = sectionEnd
 				openSections = openSections[:len(openSections)-1]
@@ -53,7 +57,7 @@ func parseSections(nodes []Node) []Node {
 			section.Nodes = append(section.Nodes, node)
 		} else {
 			if sectionEnd, ok := node.(*SectionEndTag); ok {
-				parseError(fmt.Errorf("%s unexpected unopenned section tag '%s' in input", sectionEnd.Pos, sectionEnd.Key))
+				parseError(fmt.Errorf("%s unexpected unopened section tag '%s' in input", sectionEnd.Pos, sectionEnd.Key))
 			}
 			out = append(out, node)
 		}
@@ -68,7 +72,7 @@ func parseSections(nodes []Node) []Node {
 	return out
 }
 
-// parseLines detects standalone lines and removes neseccary nodes according
+// parseLines detects standalone lines and removes necessary nodes according
 // to mustache spec
 func parseLines(nodes []Node) []Node {
 	line := []Node{}
@@ -87,7 +91,7 @@ func parseLines(nodes []Node) []Node {
 }
 
 // parseLine determines if the nodes argument represents a standalone line,
-// and removes the neseccary nodes according to mustache spec
+// and removes the necessary nodes according to mustache spec
 func parseLine(nodes []Node) []Node {
 	hasContent := false
 	standaloneTags := []int{}

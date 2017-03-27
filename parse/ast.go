@@ -1,3 +1,7 @@
+// Copyright 2017 Erik Lott. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
 package parse
 
 import (
@@ -7,15 +11,12 @@ import (
 	"github.com/mreriklott/mustache/token"
 )
 
-// Node represents a node in the parse tree. The Node interface includes an
-// unexported fields to assure that only nodes from this package can be included
-// in the parse tree.
+// Node represents a node in the parse tree.
 type Node interface {
 	String() string
 }
 
-// Tree serves as the root container node of the parse tree. The tree is not a
-// node itself.
+// Tree serves as the root container node of the parse tree.
 type Tree struct {
 	Nodes []Node
 }

@@ -1,3 +1,7 @@
+// Copyright 2017 Erik Lott. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
 package context
 
 import (
@@ -37,7 +41,6 @@ func (s *Stack) Lookup(ident string) (Value, error) {
 		err = errors.New("no context data")
 	} else if ident == "." {
 		v = s.stack[len(s.stack)-1]
-
 	} else {
 		stack := s.stack
 		keys := strings.Split(ident, ".")

@@ -1,7 +1,12 @@
-// Package token lexes mustache template strings, transforming them into a
-// stream of tokens. Clients should use the mustache package to parse and
-// render templates rather than this one, which provides shared internal data
-// structures not intended for general use.
+// Copyright 2017 Erik Lott. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
+/* Package token lexes mustache template strings, transforming them into a
+stream of tokens. Clients should use the mustache package to parse and
+render templates rather than this one, which provides shared internal data
+structures not intended for general use.
+*/
 package token
 
 import "strconv"
