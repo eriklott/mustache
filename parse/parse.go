@@ -12,7 +12,7 @@ import (
 	"github.com/eriklott/mustache/token"
 )
 
-func Parse(r token.Reader) (tree *Tree, err error) {
+func Parse(r token.Scanner) (tree *Tree, err error) {
 	// catch parse errors
 	defer func() {
 		if r := recover(); r != nil {
@@ -163,7 +163,7 @@ func indentNode(node Node, n int) {
 }
 
 // parseNode parses a stream of tokens into a node.
-func parseNode(r token.Reader) (Node, bool) {
+func parseNode(r token.Scanner) (Node, bool) {
 	var node Node
 	var eof bool
 	switch tok := nextToken(r); tok {
@@ -334,7 +334,7 @@ func parseNode(r token.Reader) (Node, bool) {
 }
 
 // parseTagKey parses a sequence of nodes that represent a tag identifier
-func parseTagKey(r token.Reader, tok token.Token) (string, token.Token) {
+func parseTagKey(r token.Scanner, tok token.Token) (string, token.Token) {
 	var accum bytes.Buffer
 	switch tok {
 	case token.DOT:
@@ -361,23 +361,19 @@ func parseTagKey(r token.Reader, tok token.Token) (string, token.Token) {
 }
 
 // nextToken returns the next token from the token reader
-func nextToken(r token.Reader) token.Token {
-	tok, err := r.Next()
-	if err != nil {
-		parseError(err)
-	}
-	return tok
+func nextToken(r token.Scanner) token.Token {
+	return r.Next()
 }
 
 // acceptToken generates a parse error (panic) if the actual token doesn't match the acceptable token
-func acceptToken(r token.Reader, actual token.Token, accept token.Token, context string) {
+func acceptToken(r token.Scanner, actual token.Token, accept token.Token, context string) {
 	if actual != accept {
 		unexpectedToken(r, context)
 	}
 }
 
 // skipWhitespaceToken returns the next non-whitespace token
-func skipWhitespaceToken(r token.Reader, tok token.Token) token.Token {
+func skipWhitespaceToken(r token.Scanner, tok token.Token) token.Token {
 	for {
 		if tok != token.WS {
 			return tok
@@ -387,7 +383,7 @@ func skipWhitespaceToken(r token.Reader, tok token.Token) token.Token {
 }
 
 // unexpectedToken generates an error
-func unexpectedToken(r token.Reader, context string) {
+func unexpectedToken(r token.Scanner, context string) {
 	parseError(fmt.Errorf("%s  unexpected %s in %s", r.Pos(), r.Text(), context))
 }
 

@@ -7,7 +7,6 @@ package mustache
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -121,7 +120,7 @@ var lambdaTests = []lambdaTest{
 func TestLambda(t *testing.T) {
 	for _, test := range lambdaTests {
 		tmpl := NewTemplate()
-		err := tmpl.Parse("main", strings.NewReader(test.Template))
+		err := tmpl.Parse("main", test.Template)
 		if err != nil {
 			t.Error(err)
 		}

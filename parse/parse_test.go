@@ -6,7 +6,6 @@ package parse
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/eriklott/mustache/token"
@@ -63,7 +62,7 @@ var parseTests = []parseTest{
 
 func TestParser_Parse(t *testing.T) {
 	for _, test := range parseTests {
-		reader := token.NewReader("", strings.NewReader(test.input), token.DefaultLeftDelim, token.DefaultRightDelim)
+		reader := token.NewScanner("", test.input, token.DefaultLeftDelim, token.DefaultRightDelim)
 		tree, err := Parse(reader)
 
 		if test.err && err == nil {

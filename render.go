@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/eriklott/mustache/context"
 	"github.com/eriklott/mustache/parse"
@@ -59,8 +58,8 @@ func (t *Template) renderPartial(w writer.Writer, stack *context.Stack, name str
 }
 
 func (t *Template) renderString(w writer.Writer, stack *context.Stack, src, ldelim, rdelim string) error {
-	tokenReader := token.NewReader("", strings.NewReader(src), ldelim, rdelim)
-	tree, err := parse.Parse(tokenReader)
+	scanner := token.NewScanner("", src, ldelim, rdelim)
+	tree, err := parse.Parse(scanner)
 	if err != nil {
 		return err
 	}

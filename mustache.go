@@ -5,9 +5,6 @@
 package mustache
 
 import (
-	"io"
-	"strings"
-
 	"github.com/eriklott/mustache/parse"
 	"github.com/eriklott/mustache/token"
 )
@@ -29,18 +26,12 @@ func NewTemplate() *Template {
 // as well as partials, are all considered 'partials' by this library, and must
 // each be added via the Parse method. Partial names must be alphanumeric. If an
 // error is returned, the mustache source has not been added to the template.
-func (t *Template) Parse(name string, r io.Reader) error {
-	tokenReader := token.NewReader("", r, token.DefaultLeftDelim, token.DefaultRightDelim)
-	tree, err := parse.Parse(tokenReader)
+func (t *Template) Parse(name string, input string) error {
+	scanner := token.NewScanner("", input, token.DefaultLeftDelim, token.DefaultRightDelim)
+	tree, err := parse.Parse(scanner)
 	if err != nil {
 		return err
 	}
 	t.treeMap[name] = tree
 	return nil
-}
-
-// ParseString functions similarly to Parse, but accepts
-// a string argument instead of an io.Reader.
-func (t *Template) ParseString(name, s string) error {
-	return t.Parse(name, strings.NewReader(s))
 }

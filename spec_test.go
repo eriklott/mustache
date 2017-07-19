@@ -209,12 +209,12 @@ func runTest(t *testing.T, file string, test *specTest) {
 
 	// init template
 	tmpl := NewTemplate()
-	err := tmpl.Parse("main", strings.NewReader(test.Template))
+	err := tmpl.Parse("main", test.Template)
 	if err != nil {
 		t.Error(err)
 	}
 	for k, v := range test.Partials {
-		err := tmpl.Parse(k, strings.NewReader(v))
+		err := tmpl.Parse(k, v)
 		if err != nil {
 			t.Error(err)
 		}
