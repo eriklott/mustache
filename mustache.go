@@ -26,8 +26,8 @@ func NewTemplate() *Template {
 // as well as partials, are all considered 'partials' by this library, and must
 // each be added via the Parse method. Partial names must be alphanumeric. If an
 // error is returned, the mustache source has not been added to the template.
-func (t *Template) Parse(name string, input string) error {
-	scanner := token.NewScanner("", input, token.DefaultLeftDelim, token.DefaultRightDelim)
+func (t *Template) Parse(name string, text string) error {
+	scanner := token.NewScanner("", text, token.DefaultLeftDelim, token.DefaultRightDelim)
 	tree, err := parse.Parse(scanner)
 	if err != nil {
 		return err
