@@ -3,26 +3,20 @@ package token
 import "fmt"
 
 type Position struct {
-	Offset int // offset, starting at 0
-	Line   int // line number, starting at 1
-	Column int // column number, starting at 1 (byte count)
+	Offset int
+	Column int
+	Line   int
 }
 
-// IsValid reports whether the position is valid.
-func (pos Position) IsValid() bool {
-	return pos.Line > 0
-}
-
+// String returns a string in one of several forms:
+//
+//	line:column    valid position with file name
+//	line           valid position with file name but no column (column == 0)
+//
 func (pos Position) String() string {
-	var s string
-	if pos.IsValid() {
-		s = fmt.Sprintf("%d", pos.Line)
-		if pos.Column != 0 {
-			s += fmt.Sprintf(":%d", pos.Column)
-		}
-	}
-	if s == "" {
-		s = "-"
+	s := fmt.Sprintf("%d", pos.Line)
+	if pos.Column != 0 {
+		s += fmt.Sprintf(":%d", pos.Column)
 	}
 	return s
 }
