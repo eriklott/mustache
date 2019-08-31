@@ -43,6 +43,8 @@ func Parse(src string) (*ast.Tree, error) {
 	return tree, err
 }
 
+// read advances and returns the next byte from the source string. Returns io.EOF
+// at the end of string.
 func (p *parser) read() (byte, error) {
 	if p.pos >= len(p.src) {
 		return 0, io.EOF
@@ -57,6 +59,8 @@ func (p *parser) read() (byte, error) {
 	return b, nil
 }
 
+// readTo advances through the string until reaching a target pattern. Returns io.EOF
+// at the end of the string, as well as any text that has been scanned up to that point.
 func (p *parser) readTo(pattern string) (string, error) {
 	start := p.pos
 	matchIdx := 0
@@ -78,15 +82,59 @@ func (p *parser) readTo(pattern string) (string, error) {
 	}
 }
 
+var eol = errors.New("end of line")
+
+// readLineTo has the same scanning behaviour as readTo, except that it stops
+// scanning at the end of a line, returning EOL error
+func (p *parser) readLineTo(pattern string) (string, error) {
+	start := p.pos
+	matchIdx := 0
+	for {
+		if p.pos >= len(p.src) {
+			return p.src[start:p.pos], io.EOF
+		}
+		b := p.src[p.pos]
+		p.pos++
+		p.col++
+		if b == '\n' {
+			p.col = 1
+			p.ln++
+			return p.src[start:p.pos], eol
+		}
+
+		if b != pattern[matchIdx] {
+			matchIdx = 0
+			continue
+		}
+
+		matchIdx++
+		if matchIdx == len(pattern) {
+			return p.src[start:p.pos], nil
+		}
+	}
+}
+
+// parse returns an ast tree representation of the source string.
 func (p *parser) parse(parent appendable) error {
 	for {
-		// read text that preceeds tag
-		text, err := p.readTo(p.ldelim)
+		textStart := p.pos
+
+		// read line of text that preceeds tag
+		text, err := p.readLineTo(p.ldelim)
+
+		// reached end of line
+		if err == eol {
+			parent.Append(&ast.Text{Value: text, EOL: true})
+			continue
+		}
+
 		if err == io.EOF {
 			if section, ok := parent.(*ast.Section); ok {
 				return p.errorf("unclosed section tag: %s", section.Key)
 			}
-			parent.Append(&ast.Text{Value: text})
+			if len(text) > 0 {
+				parent.Append(&ast.Text{Value: text})
+			}
 			return nil
 		}
 
@@ -101,7 +149,7 @@ func (p *parser) parse(parent appendable) error {
 			tag, err = p.readTo(p.rdelim)
 		}
 		if err == io.EOF {
-			return errors.New("unclosed tag")
+			return p.error("unclosed tag")
 		}
 
 		// trim right delim from tag
@@ -111,63 +159,55 @@ func (p *parser) parse(parent appendable) error {
 			return p.error("empty tag")
 		}
 
-		// check if tag is of standalone type
-		var padding string
-		standalone := false
+		// determine if tag is of standalone type
+		isStandaloneTag := false
 		if strings.Contains(standaloneTagSymbols, tag[0:1]) {
 			// Starting at the tag's left delim, scan backwards to check
-			// if the line of text preceeding the tag consists only of whitespace.
+			// if the line of text preceeding the tag consists only of whitespace
+			// since the last newline character (or the beginning of the template string).
 			// If is does, seperate it from the text as padding.
 			var i int
-			for i = len(text); i > 0; i-- {
-				if !isSpace(text[i-1]) {
+			for i = textStart + len(text); i > 0; i-- {
+				if !isSpace(p.src[i-1]) {
 					break
 				}
 			}
 
-			maybeStandalone := (i == 0 || text[i-1] == '\n')
-
-			if maybeStandalone {
-
+			if i == 0 || p.src[i-1] == '\n' {
 				// Starting at the tag's right delim, scan forwards to check
-				// if the text following the tag consists only of whitespace.
-				// If is does, set the cursor position after the whitespace, and
+				// if the text following the tag consists only of whitespace until the
+				// next newline char, or the end of template string.
+				// If is does, set the cursor position after the whitespace (and newline chars), and
 				// set the standalone = true.
-				eow := p.pos
-				for j := p.pos; j < len(p.src); j++ {
+				var j int
+				for j = p.pos; j < len(p.src); j++ {
 					if !isSpace(p.src[j]) {
-						eow = j
 						break
 					}
 				}
 
-				if eow == len(p.src) {
-					standalone = true
-					p.col += eow - p.pos
-					p.pos = eow
-				} else if eow < len(p.src) && p.src[eow] == '\n' {
-					standalone = true
-					p.col += eow - p.pos + 1
-					p.pos = eow + 1
+				if j >= len(p.src) {
+					isStandaloneTag = true
+					p.col += (j - p.pos)
+					p.pos = j
+				} else if p.src[j] == '\n' {
+					isStandaloneTag = true
+					p.col += (j - p.pos + 1)
+					p.pos = j + 1
 					p.ln++
-				} else if eow+1 < len(p.src) && p.src[eow] == '\r' && p.src[eow+1] == '\n' {
-					standalone = true
-					p.col += eow - p.pos + 2
-					p.pos = eow + 2
+				} else if j+1 < len(p.src) && p.src[j] == '\r' && p.src[j+1] == '\n' {
+					isStandaloneTag = true
+					p.col += (j - p.pos + 2)
+					p.pos = j + 2
 					p.ln++
-				}
-
-				if standalone {
-					padding = text[i:]
-					text = text[:i]
 				}
 			}
 		}
 
 		// add text node to parent
-		parent.Append(&ast.Text{
-			Value: text,
-		})
+		if !isStandaloneTag && len(text) > 0 {
+			parent.Append(&ast.Text{Value: text})
+		}
 
 		switch tag[0] {
 		case '{':
@@ -232,10 +272,11 @@ func (p *parser) parse(parent appendable) error {
 			if len(key) == 0 {
 				return p.error("empty tag")
 			}
-			parent.Append(&ast.Partial{
-				Key:    key,
-				Indent: padding,
-			})
+			node := &ast.Partial{Key: key}
+			if isStandaloneTag {
+				node.Indent = text
+			}
+			parent.Append(node)
 
 		case '!':
 			key := strings.TrimSpace(tag[1:])
@@ -245,30 +286,30 @@ func (p *parser) parse(parent appendable) error {
 
 		case '=':
 			delims := strings.TrimSpace(tag[1 : len(tag)-1])
-			parts := strings.Split(delims, " ")
-			if len(parts) != 2 {
-				return p.errorf("invalid set delims tag: %s", delims)
+			parts := strings.SplitN(delims, " ", 2)
+			if len(parts) == 2 {
+				p.ldelim = strings.TrimSpace(parts[0])
+				p.rdelim = strings.TrimSpace(parts[1])
 			}
-			p.ldelim = parts[0]
-			p.rdelim = parts[1]
 
 		default:
 			key := tag
-			parent.Append(&ast.Variable{
-				Key: key,
-			})
+			parent.Append(&ast.Variable{Key: key})
 		}
 	}
 }
 
+// errorf returns a formatted error with line/column prefix
 func (p *parser) errorf(format string, a ...interface{}) error {
 	return p.error(fmt.Sprintf(format, a...))
 }
 
+// error returns an error with line/col prefix
 func (p *parser) error(msg string) error {
 	return fmt.Errorf("%d:%d: %s", p.ln, p.col, msg)
 }
 
+// returns true when the byte represents a space
 func isSpace(b byte) bool {
 	return b == ' ' || b == '\t'
 }

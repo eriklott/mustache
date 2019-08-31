@@ -19,19 +19,22 @@ func (t *Tree) String() string {
 	return b.String()
 }
 
-func (n *Text) node() {}
-
 func (t *Tree) Append(node Node) {
 	t.Nodes = append(t.Nodes, node)
 }
 
+func (t *Tree) node() {}
+
 type Text struct {
 	Value string
+	EOL   bool // End of line - the last char is \r\n or \n
 }
 
 func (t *Text) String() string {
 	return t.Value
 }
+
+func (t *Text) node() {}
 
 type Variable struct {
 	Key       string
@@ -49,7 +52,7 @@ func (v *Variable) String() string {
 	return b.String()
 }
 
-func (n *Variable) node() {}
+func (v *Variable) node() {}
 
 type Section struct {
 	Key      string
@@ -59,7 +62,12 @@ type Section struct {
 
 func (s *Section) String() string {
 	var b strings.Builder
-	b.WriteString("{{#")
+	b.WriteString("{{")
+	if s.Inverted {
+		b.WriteString("^")
+	} else {
+		b.WriteString("#")
+	}
 	b.WriteString(s.Key)
 	b.WriteString("}}")
 	for _, node := range s.Nodes {
@@ -75,7 +83,7 @@ func (s *Section) Append(node Node) {
 	s.Nodes = append(s.Nodes, node)
 }
 
-func (n *Section) node() {}
+func (s *Section) node() {}
 
 type Partial struct {
 	Key    string
@@ -90,4 +98,4 @@ func (p *Partial) String() string {
 	return b.String()
 }
 
-func (n *Partial) node() {}
+func (p *Partial) node() {}
