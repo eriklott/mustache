@@ -16,10 +16,6 @@ const (
 	standaloneTagSymbols = "#^/>=!"
 )
 
-type appendable interface {
-	Append(node ast.Node)
-}
-
 type parser struct {
 	src    string
 	pos    int
@@ -30,7 +26,7 @@ type parser struct {
 }
 
 // Parse converts a template string into an AST representing the template's structure.
-func Parse(src string, tree *ast.Tree) (*ast.Tree, error) {
+func Parse(src string) (ast.Node, error) {
 	p := &parser{
 		src:    src,
 		pos:    0,
@@ -39,8 +35,9 @@ func Parse(src string, tree *ast.Tree) (*ast.Tree, error) {
 		ldelim: defaultLeftDelim,
 		rdelim: defaultRightDelim,
 	}
-	err := p.parse(tree)
-	return tree, err
+	tree := ast.Node{Type: ast.Tree}
+	return p.parse(tree)
+
 }
 
 // read advances and returns the next byte from the source string. Returns io.EOF
@@ -117,7 +114,7 @@ func (p *parser) readLineTo(pattern string) (string, error) {
 }
 
 // parse returns an ast tree representation of the source string.
-func (p *parser) parse(parent appendable) error {
+func (p *parser) parse(parent ast.Node) (ast.Node, error) {
 	for {
 		textStart := p.pos
 
@@ -126,18 +123,26 @@ func (p *parser) parse(parent appendable) error {
 
 		// reached end of line
 		if err == eol {
-			parent.Append(&ast.Text{Value: text, EOL: true})
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:  ast.Text,
+				Value: text,
+				EOL:   true,
+			})
 			continue
 		}
 
 		if err == io.EOF {
-			if section, ok := parent.(*ast.Section); ok {
-				return p.errorf("unclosed section tag: %s", section.Key)
+			if parent.Type == ast.Section {
+				return ast.Node{}, p.errorf("unclosed section tag: %s", parent.Value)
 			}
+
 			if len(text) > 0 {
-				parent.Append(&ast.Text{Value: text})
+				parent.Nodes = append(parent.Nodes, ast.Node{
+					Type:  ast.Text,
+					Value: text,
+				})
 			}
-			return nil
+			return parent, nil
 		}
 
 		// trim left delim from text
@@ -151,7 +156,7 @@ func (p *parser) parse(parent appendable) error {
 			tag, err = p.readTo(p.rdelim)
 		}
 		if err == io.EOF {
-			return p.error("unclosed tag")
+			return ast.Node{}, p.error("unclosed tag")
 		}
 
 		// trim right delim from tag
@@ -159,7 +164,7 @@ func (p *parser) parse(parent appendable) error {
 		// tag = trimSpace(tag)
 		// tag = trimLeftSpace(tag)
 		if len(tag) == 0 {
-			return p.error("empty tag")
+			return ast.Node{}, p.error("empty tag")
 		}
 
 		// determine if tag is of standalone type
@@ -210,82 +215,94 @@ func (p *parser) parse(parent appendable) error {
 
 		// add text node to parent
 		if !isStandaloneTag && len(text) > 0 {
-			parent.Append(&ast.Text{Value: text})
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:  ast.Text,
+				Value: text,
+			})
 		}
 
 		switch tag[0] {
 		case '{':
 			key := trimSpace(tag[1 : len(tag)-1])
 			if len(key) == 0 {
-				return p.error("empty tag")
+				return ast.Node{}, p.error("empty tag")
 			}
-			parent.Append(&ast.Variable{
-				Key:       key,
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:      ast.Variable,
+				Value:     key,
 				Unescaped: true,
 			})
 
 		case '&':
 			key := trimSpace(tag[1:])
 			if len(key) == 0 {
-				return p.error("empty tag")
+				return ast.Node{}, p.error("empty tag")
 			}
-			parent.Append(&ast.Variable{
-				Key:       key,
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:      ast.Variable,
+				Value:     key,
 				Unescaped: true,
 			})
 
 		case '#':
 			key := trimSpace(tag[1:])
 			if len(key) == 0 {
-				return p.error("empty tag")
+				return ast.Node{}, p.error("empty tag")
 			}
-			node := &ast.Section{Key: key}
-			err = p.parse(node)
+			node := ast.Node{
+				Type:  ast.Section,
+				Value: key,
+			}
+			node, err = p.parse(node)
 			if err != nil {
-				return err
+				return ast.Node{}, err
 			}
-			parent.Append(node)
+			parent.Nodes = append(parent.Nodes, node)
 
 		case '^':
 			key := trimSpace(tag[1:])
 			if len(key) == 0 {
-				return p.error("empty tag")
+				return ast.Node{}, p.error("empty tag")
 			}
-			node := &ast.Section{
-				Key:      key,
+			node := ast.Node{
+				Type:     ast.Section,
+				Value:    key,
 				Inverted: true,
 			}
-			err = p.parse(node)
+			node, err = p.parse(node)
 			if err != nil {
-				return err
+				return ast.Node{}, err
 			}
-			parent.Append(node)
+			parent.Nodes = append(parent.Nodes, node)
 
 		case '/':
 			key := trimSpace(tag[1:])
 			if len(key) == 0 {
-				return p.error("empty tag")
+				return ast.Node{}, p.error("empty tag")
 			}
-			if section, ok := parent.(*ast.Section); !ok || key != section.Key {
-				return p.error("unexpected section closing tag")
+			if parent.Type != ast.Section || parent.Value != key {
+				return ast.Node{}, p.error("unexpected section closing tag")
 			}
-			return nil
+			return parent, nil
 
 		case '>':
 			key := trimSpace(tag[1:])
 			if len(key) == 0 {
-				return p.error("empty tag")
+				return ast.Node{}, p.error("empty tag")
 			}
-			node := &ast.Partial{Key: key}
+			node := ast.Node{
+				Type:  ast.Partial,
+				Value: key,
+			}
 			if isStandaloneTag {
 				node.Indent = text
 			}
-			parent.Append(node)
+			parent.Nodes = append(parent.Nodes, node)
 
 		case '!':
 			key := trimSpace(tag[1:])
 			if len(key) == 0 {
-				return p.error("empty tag")
+				return ast.Node{}, p.error("empty tag")
 			}
 
 		case '=':
@@ -298,7 +315,11 @@ func (p *parser) parse(parent appendable) error {
 
 		default:
 			key := trimSpace(tag)
-			parent.Append(&ast.Variable{Key: key})
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:  ast.Variable,
+				Value: key,
+			})
+
 		}
 	}
 }
@@ -353,12 +374,13 @@ func trimSpace(s string) string {
 	return trimLeftSpace(trimRightSpace(s))
 }
 
-// ============================================================================
+// ===================================================================================================
 
 // import (
 // 	"errors"
 // 	"fmt"
 // 	"io"
+// 	"strconv"
 // 	"strings"
 
 // 	"github.com/eriklott/mustache/internal/ast"
@@ -664,7 +686,14 @@ func trimSpace(s string) string {
 
 // // error returns an error with line/col prefix
 // func (p *parser) error(msg string) error {
-// 	return fmt.Errorf("%d:%d: %s", p.ln, p.col, msg)
+// 	var b strings.Builder
+// 	b.WriteString(strconv.Itoa(p.ln))
+// 	b.WriteString(":")
+// 	b.WriteString(strconv.Itoa(p.col))
+// 	b.WriteString(": ")
+// 	b.WriteString(msg)
+// 	s := b.String()
+// 	return errors.New(s)
 // }
 
 // // returns true when the byte represents a space
