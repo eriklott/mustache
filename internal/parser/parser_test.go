@@ -1,6 +1,7 @@
 package parser_test
 
 import (
+	"io/ioutil"
 	"testing"
 
 	"github.com/eriklott/mustache/internal/ast"
@@ -19,6 +20,7 @@ func TestParse(t *testing.T) {
 		{"Newline", "\n", "", &ast.Tree{Nodes: []ast.Node{&ast.Text{Value: "\n", EOL: true}}}},
 		{"Carriage return", "\r\n", "", &ast.Tree{Nodes: []ast.Node{&ast.Text{Value: "\r\n", EOL: true}}}},
 		{"Variable", "{{a}}", "", &ast.Tree{Nodes: []ast.Node{&ast.Variable{Key: "a"}}}},
+		{"Variable/InternalSpace", "{{ a }}", "", &ast.Tree{Nodes: []ast.Node{&ast.Variable{Key: "a"}}}},
 		{"Variable/Empty", "{{}}", "1:5: empty tag", nil},
 		{"Variable/UnescapedSymbol", "{{&a}}", "", &ast.Tree{Nodes: []ast.Node{&ast.Variable{Key: "a", Unescaped: true}}}},
 		{"Variable/UnescapedSymbol/Empty", "{{&}}", "1:6: empty tag", nil},
@@ -44,7 +46,7 @@ func TestParse(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			tree, err := parser.Parse(tc.tmpl)
+			tree, err := parser.Parse(tc.tmpl, &ast.Tree{})
 
 			var errStr string
 			if err != nil {
@@ -61,5 +63,17 @@ func TestParse(t *testing.T) {
 				t.Errorf("tree mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func BenchmarkParse(b *testing.B) {
+	tmplBytes, err := ioutil.ReadFile("../../testdata/template.mustache")
+	if err != nil {
+		b.Fatal(err)
+	}
+	tmpl := string(tmplBytes)
+
+	for n := 0; n < b.N; n++ {
+		parser.Parse(tmpl, &ast.Tree{})
 	}
 }

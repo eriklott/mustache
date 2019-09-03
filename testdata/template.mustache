@@ -1,0 +1,57 @@
+Lorem ipsum dolor sit amet, {{ name }} adipiscing elit. {{ age }} ullamcorper iaculis leo vitae euismod. 
+Aenean non lectus lacinia, faucibus leo id, pretium mauris. Aenean a risus nisi. Mauris vitae pharetra tortor. 
+Aenean sollicitudin mi at {{{ eyecolor }}} varius. Vivamus quis odio varius, tempus urna sed, pharetra ipsum. Ut 
+blandit tellus libero. Phasellus eget tellus nec {{ height }} finibus sagittis. Duis vel arcu a elit mollis lacinia in 
+eget risus. Phasellus vel ante id dolor sagittis elementum. Vestibulum tortor felis, vulputate ut tortor eu, 
+elementum pulvinar libero. {{ weight }} nec tellus commodo, sollicitudin tortor ac, porttitor mi.
+
+{{#male}}
+Duis sollicitudin venenatis ante. Ut eu erat et risus hendrerit aliquet quis non arcu. Nunc vulputate purus ac libero 
+maximus, vitae ultricies turpis consequat. Aliquam mattis lorem ut vehicula volutpat. Vestibulum et blandit metus. 
+Quisque nec blandit nulla. Fusce in tellus id dui ultricies gravida vel sit amet ligula.
+{{#isMarried}}
+    Wife's Name: {{wifeName}}
+    Number of children: {{numOfChildren}}
+{{/isMarried}}
+{{^isMarried}}
+    Not Married.
+{{/isMarried}}
+{{/male}}
+
+{{#female}}
+Aenean sed vehicula odio, vel ultrices nibh. Proin sollicitudin orci id ornare rhoncus. Praesent at consectetur nunc, 
+non sagittis libero. Aenean facilisis convallis libero, aliquet auctor enim volutpat a. Nam id mauris id diam convallis 
+feugiat et vitae nunc. Maecenas egestas molestie lectus, quis aliquam urna volutpat eget. Duis fermentum tortor turpis, 
+ac feugiat urna volutpat nec. Mauris ut dui eros. Fusce sit amet ex non purus consectetur posuere id quis diam. Sed 
+scelerisque nunc et facilisis suscipit. Nullam risus ex, rutrum vitae hendrerit sed, finibus in enim. Nulla scelerisque 
+arcu a lorem commodo, ac sagittis felis facilisis. Donec auctor lacinia velit, non pellentesque ante vestibulum non. 
+Pellentesque pellentesque turpis sed risus facilisis, ac tristique leo finibus. Nulla euismod consequat arcu vitae 
+scelerisque. Donec egestas nisl mauris, ac aliquet sem consectetur at.
+{{/female}}
+
+Friends List
+{{#frields}}
+    Name: {{name}}
+    Age: {{age}}
+    Gender: {{gender}}
+    Distance: {{distance}} kilometers
+{{/frields}}
+{{^frields}}
+You have no friends :(
+{{/frields}}
+
+{{<< >>}}
+
+Pets List
+<<#pets>>
+    Type: <<species>>
+    Gender: <<gender>>
+    Name: <<name>>
+    Color: <<color>>
+    Weight: <<weight>>
+<</pets>>
+<<^pets>>
+    You have no pets :(
+<</pets>>
+
+<<> signature >>

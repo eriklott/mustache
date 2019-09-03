@@ -1,0 +1,55 @@
+{
+    "name": "John Doe",
+    "age": 20,
+    "eyecolor": "brown",
+    "height": "6 feet",
+    "weight": 180,
+    "male" : {
+        "isMarried": false,
+        "wifeName": "Jane Doe",
+        "numOfChildren": 0
+    },
+    "friends" : [
+        {
+            "name": "Peter Parker",
+            "age": 17,
+            "gender" : "male",
+            "distance": 4
+        },
+        {
+            "name": "Bruce Banner",
+            "age": 45,
+            "gender" : "male",
+            "distance": 430
+        },
+        {
+            "name": "Tony Stark",
+            "age": 41,
+            "gender" : "male",
+            "distance": 183
+        }        
+    ],
+    "pets" : [
+        {
+            "species": "dog",
+            "gender": "male",
+            "name": "Sparky",
+            "color": "Grey",
+            "weight": 13
+        },
+        {
+            "species": "cat",
+            "gender": "male",
+            "name": "Fluffles",
+            "color": "Black",
+            "weight": 12
+        },
+        {
+            "species": "dog",
+            "gender": "female",
+            "name": "Daisy",
+            "color": "White",
+            "weight": 9
+        }                 
+    ]
+}
