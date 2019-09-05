@@ -5,33 +5,52 @@
 package mustache
 
 import (
-	"github.com/eriklott/mustache/parse"
-	"github.com/eriklott/mustache/token"
+	"errors"
+	"fmt"
+
+	"github.com/eriklott/mustache/internal/ast"
+	"github.com/eriklott/mustache/internal/parser"
+	"github.com/eriklott/mustache/internal/render"
 )
 
-// Template is the representation of a parsed mustache template.
 type Template struct {
-	treeMap   map[string]*parse.Tree
-	renderErr error
+	treeMap map[string]*ast.Tree
 }
 
-// NewTemplate returns a new template instance
 func NewTemplate() *Template {
 	return &Template{
-		treeMap: map[string]*parse.Tree{},
+		treeMap: make(map[string]*ast.Tree),
 	}
 }
 
-// Parse parses the mustache input as a named partial. Base (or root) templates,
-// as well as partials, are all considered 'partials' by this library, and must
-// each be added via the Parse method. Partial names must be alphanumeric. If an
-// error is returned, the mustache source has not been added to the template.
-func (t *Template) Parse(name string, text string) error {
-	scanner := token.NewScanner("", text, token.DefaultLeftDelim, token.DefaultRightDelim)
-	tree, err := parse.Parse(scanner)
+func (t *Template) Parse(name, text string) error {
+	tree, err := parser.Parse(text)
 	if err != nil {
-		return err
+		return errors.New(name + ":" + err.Error())
 	}
 	t.treeMap[name] = tree
 	return nil
+}
+
+func (t *Template) Render(name string, contexts ...interface{}) (string, error) {
+	tree, ok := t.treeMap[name]
+	if !ok {
+		return "", fmt.Errorf("template not found: %s", name)
+	}
+	s := render.Render(tree, t.treeMap, contexts)
+	return s, nil
+}
+
+func Parse(name, text string) (*Template, error) {
+	t := NewTemplate()
+	err := t.Parse(name, text)
+	return t, err
+}
+
+func Render(text string, contexts ...interface{}) (string, error) {
+	t, err := Parse("main", text)
+	if err != nil {
+		return "", err
+	}
+	return t.Render("main", contexts...)
 }

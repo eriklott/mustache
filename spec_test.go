@@ -2,10 +2,9 @@
 // Use of this source code is governed by a MIT
 // license that can be found in the LICENSE file.
 
-package mustache
+package mustache_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/eriklott/mustache"
 )
 
 var enabledTests = map[string]map[string]bool{
@@ -114,10 +115,10 @@ var enabledTests = map[string]map[string]bool{
 		"Padding Whitespace":               true,
 	},
 	"sections.json": map[string]bool{
-		"Truthy":                 true,
-		"Falsey":                 true,
-		"Context":                true,
-		"Deeply Nested Contexts": true,
+		"Truthy":                           true,
+		"Falsey":                           true,
+		"Context":                          true,
+		"Deeply Nested Contexts":           true,
 		"List":                             true,
 		"Empty List":                       true,
 		"Doubled":                          true,
@@ -208,7 +209,7 @@ func runTest(t *testing.T, file string, test *specTest) {
 	}
 
 	// init template
-	tmpl := NewTemplate()
+	tmpl := mustache.NewTemplate()
 	err := tmpl.Parse("main", test.Template)
 	if err != nil {
 		t.Error(err)
@@ -221,9 +222,10 @@ func runTest(t *testing.T, file string, test *specTest) {
 	}
 
 	// render template
-	var w bytes.Buffer
-	tmpl.Render(&w, "main", test.Data)
-	out := w.String()
+	out, err := tmpl.Render("main", test.Data)
+	if err != nil {
+		t.Fatal((err))
+	}
 
 	// specs test against escaped char &quot; rather than go's &#34;
 	out = strings.Replace(out, "&#34;", "&quot;", -1)
