@@ -402,6 +402,25 @@ func (p *parser) parseDottedKey(ln, col int, key string) ([]string, error) {
 		return []string{"."}, nil
 	}
 	return strings.Split(key, "."), nil
+	// return splitString(key, '.'), nil
+}
+
+func splitString(s string, delim byte) []string {
+	parts := []string{}
+	i := 0
+	for {
+		if i >= len(s) {
+			break
+		}
+		if s[i] == delim {
+			parts = append(parts, s[:i])
+			s = s[i+1:]
+			i = -1
+		}
+		i++
+	}
+	parts = append(parts, s)
+	return parts
 }
 
 func (p *parser) validateDottedKey(ln, col int, key string) error {
