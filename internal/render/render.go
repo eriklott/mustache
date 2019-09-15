@@ -1,3 +1,7 @@
+// Copyright 2019 Erik Lott. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
 package render
 
 import (
@@ -8,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/eriklott/mustache/internal/ast"
 	"github.com/eriklott/mustache/internal/parse"
 )
 
@@ -18,15 +23,24 @@ type renderer struct {
 	indent     string
 	indentNext bool
 	contexts   []reflect.Value
-	trees      map[string]*parse.Tree
+	treeMap    map[string]*ast.Tree
 	depth      int //the height of the stack of executing partials
 }
 
-func Render(tree *parse.Tree, trees map[string]*parse.Tree, contexts []reflect.Value) string {
+func Render(tree *ast.Tree, treeMap map[string]*ast.Tree, contexts []interface{}) string {
+	var reversedContexts []reflect.Value
+	for i := len(contexts) - 1; i >= 0; i-- {
+		c := reflect.ValueOf(contexts[i])
+		reversedContexts = append(reversedContexts, c)
+	}
+	return render(tree, treeMap, reversedContexts)
+}
+
+func render(tree *ast.Tree, treeMap map[string]*ast.Tree, contexts []reflect.Value) string {
 	r := &renderer{
 		indentNext: true,
 		contexts:   contexts,
-		trees:      trees,
+		treeMap:    treeMap,
 	}
 	r.render(tree)
 	return r.b.String()
@@ -66,18 +80,18 @@ func (r *renderer) removeContext() {
 
 func (r *renderer) render(node interface{}) {
 	switch t := node.(type) {
-	case *parse.Tree:
+	case *ast.Tree:
 		for i := range t.Nodes {
 			r.render(t.Nodes[i])
 		}
 
-	case *parse.Text:
+	case *ast.Text:
 		r.write(t.Text)
 		if t.EndOfLine {
 			r.indentNextWrite()
 		}
 
-	case *parse.VariableTag:
+	case *ast.Variable:
 		v := r.lookup(t.Key)
 		s := r.toString(v, parse.DefaultLeftDelim, parse.DefaultRightDelim)
 		if t.Unescaped {
@@ -86,42 +100,42 @@ func (r *renderer) render(node interface{}) {
 			r.escapedWrite(s)
 		}
 
-	case *parse.SectionTag:
+	case *ast.Section:
 		v := indirect(r.lookup(t.Key))
-		isTruthy := isSectionTruthy(v)
+		isTruthy := r.isSectionTruthy(v, t.LDelim, t.RDelim)
 		if !t.Inverted && isTruthy {
 			switch v.Kind() {
 			case reflect.Slice, reflect.Array:
 				for i := 0; i < v.Len(); i++ {
 					r.addContext(v.Index(i))
-					for _, node := range t.Nodes {
-						r.render(node)
+					for j := range t.Nodes {
+						r.render(t.Nodes[j])
 					}
 					r.removeContext()
 				}
 			case reflect.Func:
-				s := v.Call([]reflect.Value{reflect.ValueOf(t.ChildrenText)})[0].String()
+				s := v.Call([]reflect.Value{reflect.ValueOf(t.Text)})[0].String()
 				tree, err := parse.Parse("lambda", s, t.LDelim, t.RDelim)
 				if err != nil {
 					return
 				}
-				r.write(Render(tree, r.trees, r.contexts))
+				r.write(render(tree, r.treeMap, r.contexts))
 
 			default:
 				r.addContext(v)
-				for _, node := range t.Nodes {
-					r.render(node)
+				for i := range t.Nodes {
+					r.render(t.Nodes[i])
 				}
 				r.removeContext()
 			}
 		} else if t.Inverted && !isTruthy {
-			for _, node := range t.Nodes {
-				r.render(node)
+			for i := range t.Nodes {
+				r.render(t.Nodes[i])
 			}
 		}
 
-	case *parse.PartialTag:
-		tree, ok := r.trees[t.Key]
+	case *ast.Partial:
+		tree, ok := r.treeMap[t.Key]
 		if !ok {
 			return
 		}
@@ -219,17 +233,20 @@ func (r *renderer) toString(v reflect.Value, ldelim, rdelim string) string {
 		}
 
 		t := v.Type()
-		isArity0 := t.NumIn() == 0 && t.NumOut() == 1 && t.Out(0).Kind() == reflect.String
+		isArity0 := t.NumIn() == 0 && t.NumOut() == 1
 		if !isArity0 {
 			return ""
 		}
 
-		s := v.Call(nil)[0].String()
-		tree, err := parse.Parse("lambda", s, ldelim, rdelim)
+		v = v.Call(nil)[0]
+		if v.Kind() != reflect.String {
+			return r.toString(v, ldelim, rdelim)
+		}
+		tree, err := parse.Parse("lambda", v.String(), ldelim, rdelim)
 		if err != nil {
 			return ""
 		}
-		return Render(tree, r.trees, r.contexts)
+		return render(tree, r.treeMap, r.contexts)
 
 	case reflect.Ptr, reflect.Interface:
 		return r.toString(indirect(v), ldelim, rdelim)
@@ -257,7 +274,7 @@ loop:
 	return v
 }
 
-func isSectionTruthy(v reflect.Value) bool {
+func (r *renderer) isSectionTruthy(v reflect.Value, ldelim, rdelim string) bool {
 	switch v.Kind() {
 	case reflect.Bool:
 		return v.Bool()
@@ -279,10 +296,23 @@ func isSectionTruthy(v reflect.Value) bool {
 			return false
 		}
 		t := v.Type()
-		isArity1 := t.NumIn() == 1 && t.NumOut() == 1 && t.Out(0).Kind() == reflect.String
+		isArity0 := t.NumIn() == 0 && t.NumOut() == 1
+		if isArity0 {
+			v = v.Call(nil)[0]
+			if v.Kind() != reflect.String {
+				return r.isSectionTruthy(v, ldelim, rdelim)
+			}
+			tree, err := parse.Parse("lambda", v.String(), ldelim, rdelim)
+			if err != nil {
+				return false
+			}
+			s := render(tree, r.treeMap, r.contexts)
+			return r.isSectionTruthy(reflect.ValueOf(s), ldelim, rdelim)
+		}
+		isArity1 := t.NumIn() == 1 && t.In(0).Kind() == reflect.String && t.NumOut() == 1 && t.Out(0).Kind() == reflect.String
 		return isArity1
 	case reflect.Ptr, reflect.Interface:
-		return isSectionTruthy(indirect(v))
+		return r.isSectionTruthy(indirect(v), ldelim, rdelim)
 	case reflect.Map:
 		return !v.IsNil()
 	case reflect.Struct:

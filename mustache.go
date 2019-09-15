@@ -1,4 +1,4 @@
-// Copyright 2017 Erik Lott. All rights reserved.
+// Copyright 2019 Erik Lott. All rights reserved.
 // Use of this source code is governed by a MIT
 // license that can be found in the LICENSE file.
 
@@ -6,19 +6,19 @@ package mustache
 
 import (
 	"fmt"
-	"reflect"
 
+	"github.com/eriklott/mustache/internal/ast"
 	"github.com/eriklott/mustache/internal/parse"
 	"github.com/eriklott/mustache/internal/render"
 )
 
 type Template struct {
-	treeMap map[string]*parse.Tree
+	treeMap map[string]*ast.Tree
 }
 
 func NewTemplate() *Template {
 	return &Template{
-		treeMap: make(map[string]*parse.Tree),
+		treeMap: make(map[string]*ast.Tree),
 	}
 }
 
@@ -32,17 +32,11 @@ func (t *Template) Parse(name, text string) error {
 }
 
 func (t *Template) Render(name string, contexts ...interface{}) (string, error) {
-	var reversedContexts []reflect.Value
-	for i := len(contexts) - 1; i >= 0; i-- {
-		c := reflect.ValueOf(contexts[i])
-		reversedContexts = append(reversedContexts, c)
-	}
-
 	tree, ok := t.treeMap[name]
 	if !ok {
 		return "", fmt.Errorf("template not found: %s", name)
 	}
-	s := render.Render(tree, t.treeMap, reversedContexts)
+	s := render.Render(tree, t.treeMap, contexts)
 	return s, nil
 }
 
