@@ -45,14 +45,24 @@ func TestParse(t *testing.T) {
 			name: "Variable",
 			tmpl: "{{a}}",
 			nodes: []ast.Node{
-				&ast.Variable{Key: []string{"a"}},
+				&ast.Variable{
+					Key:       []string{"a"},
+					Unescaped: false,
+					Line:      1,
+					Column:    1,
+				},
 			},
 		},
 		{
 			name: "Variable/Whitespace",
 			tmpl: "{{ a }}",
 			nodes: []ast.Node{
-				&ast.Variable{Key: []string{"a"}},
+				&ast.Variable{
+					Key:       []string{"a"},
+					Unescaped: false,
+					Line:      1,
+					Column:    1,
+				},
 			},
 		},
 		{
@@ -64,7 +74,12 @@ func TestParse(t *testing.T) {
 			name: "Variable/Key/Dotted",
 			tmpl: "{{a.b.c}}",
 			nodes: []ast.Node{
-				&ast.Variable{Key: []string{"a", "b", "c"}},
+				&ast.Variable{
+					Key:       []string{"a", "b", "c"},
+					Unescaped: false,
+					Line:      1,
+					Column:    1,
+				},
 			},
 		},
 		{
@@ -86,7 +101,12 @@ func TestParse(t *testing.T) {
 			name: "Variable/Key/SingleDot",
 			tmpl: "{{.}}",
 			nodes: []ast.Node{
-				&ast.Variable{Key: []string{"."}},
+				&ast.Variable{
+					Key:       []string{"."},
+					Unescaped: false,
+					Line:      1,
+					Column:    1,
+				},
 			},
 		},
 		{
@@ -96,6 +116,8 @@ func TestParse(t *testing.T) {
 				&ast.Variable{
 					Key:       []string{"a"},
 					Unescaped: true,
+					Line:      1,
+					Column:    1,
 				},
 			},
 		},
@@ -106,6 +128,8 @@ func TestParse(t *testing.T) {
 				&ast.Variable{
 					Key:       []string{"a"},
 					Unescaped: true,
+					Line:      1,
+					Column:    1,
 				},
 			},
 		},
@@ -127,6 +151,8 @@ func TestParse(t *testing.T) {
 					Key:    []string{"a"},
 					LDelim: "{{",
 					RDelim: "}}",
+					Line:   1,
+					Column: 1,
 				},
 			},
 		},
@@ -139,6 +165,8 @@ func TestParse(t *testing.T) {
 					Inverted: true,
 					LDelim:   "{{",
 					RDelim:   "}}",
+					Line:     1,
+					Column:   1,
 				},
 			},
 		},
@@ -172,6 +200,8 @@ func TestParse(t *testing.T) {
 					LDelim:   "{{",
 					RDelim:   "}}",
 					Text:     "abc",
+					Line:     1,
+					Column:   1,
 					Nodes: []ast.Node{
 						&ast.Text{Text: "abc"},
 					},
@@ -183,7 +213,9 @@ func TestParse(t *testing.T) {
 			tmpl: "{{>a}}",
 			nodes: []ast.Node{
 				&ast.Partial{
-					Key: "a",
+					Key:    "a",
+					Line:   1,
+					Column: 1,
 				},
 			},
 		},
@@ -206,7 +238,11 @@ func TestParse(t *testing.T) {
 			name: "SetDelim/ChangesDelimeters",
 			tmpl: "{{=| |=}}|a|",
 			nodes: []ast.Node{
-				&ast.Variable{Key: []string{"a"}},
+				&ast.Variable{
+					Key:    []string{"a"},
+					Line:   1,
+					Column: 10,
+				},
 			},
 		},
 		{
@@ -235,7 +271,12 @@ func TestParse(t *testing.T) {
 			name: "Partial/StandaloneIndent",
 			tmpl: "  {{>a}}  ",
 			nodes: []ast.Node{
-				&ast.Partial{Key: "a", Indent: "  "},
+				&ast.Partial{
+					Key:    "a",
+					Indent: "  ",
+					Line:   1,
+					Column: 3,
+				},
 			},
 		},
 	}
