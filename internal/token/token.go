@@ -127,7 +127,6 @@ func (s *Scanner) Next() (Token, error) {
 
 	if isEndOfLine {
 		s.isNewLine = true
-
 		text := Token{
 			Type:      TEXT_EOL,
 			Text:      s.src[startPos:s.pos],
@@ -174,7 +173,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = UNESCAPED_VARIABLE
 		key := s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)-1]
-		key = trimSpace(key)
+		key = strings.TrimSpace(key)
 		err = s.validateDottedKey(startLn, startCol, key)
 		if err != nil {
 			return Token{}, err
@@ -188,7 +187,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = UNESCAPED_VARIABLE_SYM
 		key := s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)]
-		key = trimSpace(key)
+		key = strings.TrimSpace(key)
 		err = s.validateDottedKey(startLn, startCol, key)
 		if err != nil {
 			return Token{}, err
@@ -202,7 +201,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = SECTION
 		key := s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)]
-		key = trimSpace(key)
+		key = strings.TrimSpace(key)
 		err = s.validateDottedKey(startLn, startCol, key)
 		if err != nil {
 			return Token{}, err
@@ -216,7 +215,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = INVERTED_SECTION
 		key := s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)]
-		key = trimSpace(key)
+		key = strings.TrimSpace(key)
 		err = s.validateDottedKey(startLn, startCol, key)
 		if err != nil {
 			return Token{}, err
@@ -230,7 +229,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = SECTION_END
 		key := s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)]
-		key = trimSpace(key)
+		key = strings.TrimSpace(key)
 		err = s.validateDottedKey(startLn, startCol, key)
 		if err != nil {
 			return Token{}, err
@@ -244,7 +243,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = PARTIAL
 		key := s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)]
-		key = trimSpace(key)
+		key = strings.TrimSpace(key)
 		err = s.validatePartialKey(startLn, startCol, key)
 		if err != nil {
 			return Token{}, err
@@ -257,7 +256,7 @@ func (s *Scanner) Next() (Token, error) {
 			return Token{}, s.error(startLn, startCol, "unclosed tag")
 		}
 		delims := s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)-1]
-		delims = trimSpace(delims)
+		delims = strings.TrimSpace(delims)
 		parts := strings.Split(delims, " ")
 		if len(parts) == 2 {
 			s.ldelim = parts[0]
@@ -273,7 +272,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = COMMENT
 		tagText = s.src[startPos+len(s.ldelim)+1 : s.pos-len(s.rdelim)]
-		tagText = trimSpace(tagText)
+		tagText = strings.TrimSpace(tagText)
 
 	default:
 		_, err = s.readTo(s.rdelim, false)
@@ -282,7 +281,7 @@ func (s *Scanner) Next() (Token, error) {
 		}
 		tagType = VARIABLE
 		key := s.src[startPos+len(s.ldelim) : s.pos-len(s.rdelim)]
-		key = trimSpace(key)
+		key = strings.TrimSpace(key)
 		err = s.validateDottedKey(startLn, startCol, key)
 		if err != nil {
 			return Token{}, err
@@ -376,39 +375,6 @@ func (s *Scanner) hasRightPadding(pos int) (int, bool) {
 		if b != ' ' && b != '\t' && b != '\r' {
 			return pos, (b == '\n')
 		}
-	}
-}
-
-func trimLeftSpace(s string) string {
-	var i int
-	for i = 0; i < len(s); i++ {
-		if !isSpace(s[i]) {
-			return s[i:]
-		}
-	}
-	return s
-}
-
-func trimRightSpace(s string) string {
-	var i int
-	for i = len(s); i > 0; i-- {
-		if !isSpace(s[i-1]) {
-			return s[:i]
-		}
-	}
-	return s
-}
-
-func trimSpace(s string) string {
-	return trimLeftSpace(trimRightSpace(s))
-}
-
-func isSpace(b byte) bool {
-	switch b {
-	case ' ', '\t':
-		return true
-	default:
-		return false
 	}
 }
 

@@ -16,7 +16,7 @@ import (
 	"github.com/eriklott/mustache"
 )
 
-func TestSpec(t *testing.T) {
+func TestRender_Spec(t *testing.T) {
 	specs := []string{
 		"comments.json",
 		"delimiters.json",
@@ -86,7 +86,7 @@ func TestSpec(t *testing.T) {
 	}
 }
 
-func TestLambda(t *testing.T) {
+func TestRender_SpecLambda(t *testing.T) {
 
 	var testLambdaNum = 0
 
@@ -206,12 +206,12 @@ func TestLambda(t *testing.T) {
 			tmpl := mustache.NewTemplate()
 			err := tmpl.Parse("main", tc.template)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("failed to parse template: %v", err)
 			}
 
 			got, err := tmpl.Render("main", tc.data)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("failed to render template: %v", err)
 			}
 
 			if !reflect.DeepEqual(tc.expected, got) {
@@ -221,35 +221,129 @@ func TestLambda(t *testing.T) {
 	}
 }
 
-type structContext struct {
-	v  string
+type testStructContext struct {
+	v1 string
 	v2 int
 }
 
-func (s structContext) StringVal() string {
-	return s.v
+func (s testStructContext) StringVal() string {
+	return s.v1
 }
 
-func (s structContext) IntVal() int {
-	return s.v2
-}
-
-func (s *structContext) PtrStringVal() string {
-	return s.v
-}
-
-func (s *structContext) PtrIntVal() int {
+func (s testStructContext) IntVal() int {
 	return s.v2
 }
 
 func TestRender_Methods(t *testing.T) {
-	got, err := mustache.Render("{{StringVal}},{{IntVal}}", structContext{"1", 2})
+	tmpl := mustache.NewTemplate()
+	err := tmpl.Parse("main", "{{StringVal}},{{IntVal}}")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to parse template: %v", err)
+	}
+	got, err := tmpl.Render("main", testStructContext{"1", 2})
+	if err != nil {
+		t.Fatalf("failed to render template: %v", err)
 	}
 	want := "1,2"
 	if got != want {
 		t.Errorf("unexpected response, got: '%s', want: '%s'", got, want)
+	}
+}
+
+func TestRender_InfinitePartialRecursion(t *testing.T) {
+	tmpl := mustache.NewTemplate()
+	err := tmpl.Parse("main", "{{>main}}")
+	if err != nil {
+		t.Fatalf("failed to parse template: %v", err)
+	}
+
+	_, err = tmpl.Render("main")
+	if err == nil {
+		t.Error("expected infinite partial recursion error, got none")
+	}
+}
+
+func TestRender_ContextMiss(t *testing.T) {
+	tt := []struct {
+		name       string
+		text       string
+		data       map[string]interface{}
+		partials   map[string]string
+		errEnabled bool
+		want       string
+		err        string
+	}{
+		{
+			name: "context miss when errors disabled",
+			text: "{{a}} {{b}}",
+			data: map[string]interface{}{
+				"a": "Hello World!",
+			},
+			errEnabled: false,
+			want:       "Hello World! ",
+		},
+		{
+			name: "context miss when errors enabled",
+			text: "{{a}} {{b}}",
+			data: map[string]interface{}{
+				"a": "Hello World!",
+			},
+			errEnabled: true,
+			err:        "main:1:7: cannot find value b in context",
+		},
+		{
+			name: "partial miss when errors disabled",
+			text: "{{>a}} {{>b}}",
+			data: map[string]interface{}{},
+			partials: map[string]string{
+				"a": "A",
+			},
+			errEnabled: false,
+			want:       "A ",
+		},
+		{
+			name: "partial miss when errors enabled",
+			text: "{{>a}} {{>b}}",
+			data: map[string]interface{}{},
+			partials: map[string]string{
+				"a": "A",
+			},
+			errEnabled: true,
+			err:        "main:1:8: partial not found: b",
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := mustache.NewTemplate()
+			tmpl.ContextErrorsEnabled = tc.errEnabled
+			err := tmpl.Parse("main", tc.text)
+			if err != nil {
+				t.Fatalf("failed to parse template: %v", err)
+			}
+			for key, partial := range tc.partials {
+				err := tmpl.Parse(key, partial)
+				if err != nil {
+					t.Fatalf("failed to parse partial: %v", err)
+				}
+			}
+
+			got, err := tmpl.Render("main", tc.data)
+			var errStr string
+			if err != nil {
+				errStr = err.Error()
+			}
+			if errStr != tc.err {
+				t.Errorf("unexpected error, got:%s, want:%s", errStr, tc.err)
+			}
+			if err != nil || tc.err != "" {
+				return
+			}
+
+			if got != tc.want {
+				t.Errorf("unexpected response, got:%s, want:%s", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -269,7 +363,12 @@ func BenchmarkRender(b *testing.B) {
 	json.Unmarshal(dataBytes, data)
 
 	for n := 0; n < b.N; n++ {
-		_, err := mustache.Render(tmpl, data)
+		t := mustache.NewTemplate()
+		err := t.Parse("main", tmpl)
+		if err != nil {
+			b.Fatalf("failed to parse template: %v", err)
+		}
+		_, err = t.Render("main", data)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -14,32 +14,41 @@ import (
 	"github.com/eriklott/mustache/internal/token"
 )
 
+// Default mustache delimeters
 const (
 	DefaultLeftDelim  = "{{"
 	DefaultRightDelim = "}}"
 )
 
+// parser contains the state for the parsing process.
 type parser struct {
 	name string
 	src  string
 	s    *token.Scanner
 }
 
+// Parse transforms a template string into a tree of nodes. If an error is
+// encountered, parsing stops and the error is returned.
 func Parse(name, src, leftDelim, rightDelim string) (*ast.Tree, error) {
 	p := &parser{
 		name: name,
 		src:  src,
 		s:    token.NewScanner(name, src, leftDelim, rightDelim),
 	}
-	tree := &ast.Tree{}
+	tree := &ast.Tree{
+		Name: name,
+	}
 	err := p.parse(tree, 0)
 	return tree, err
 }
 
+// parentNode represents an element that can add an ast.Node (mainly a ast.Tree or ast.Section)
 type parentNode interface {
 	Add(ast.Node)
 }
 
+// parse recursively parses the template string, constructing nodes and adding them to
+// the tree. If an error is encountered, parse stops and the error is returned.
 func (p *parser) parse(parent parentNode, start int) error {
 	for {
 		t, err := p.s.Next()
@@ -74,12 +83,16 @@ func (p *parser) parse(parent parentNode, start int) error {
 			parent.Add(&ast.Variable{
 				Key:       splitKey(t.Text),
 				Unescaped: false,
+				Line:      t.Line,
+				Column:    t.Column,
 			})
 
 		case token.UNESCAPED_VARIABLE, token.UNESCAPED_VARIABLE_SYM:
 			parent.Add(&ast.Variable{
 				Key:       splitKey(t.Text),
 				Unescaped: true,
+				Line:      t.Line,
+				Column:    t.Column,
 			})
 
 		case token.SECTION, token.INVERTED_SECTION:
@@ -88,6 +101,8 @@ func (p *parser) parse(parent parentNode, start int) error {
 				Inverted: t.Type == token.INVERTED_SECTION,
 				LDelim:   p.s.LeftDelim(),
 				RDelim:   p.s.RightDelim(),
+				Line:     t.Line,
+				Column:   t.Column,
 			}
 			err := p.parse(node, t.EndOffset)
 			if err == io.EOF {
@@ -110,11 +125,15 @@ func (p *parser) parse(parent parentNode, start int) error {
 			parent.Add(&ast.Partial{
 				Key:    t.Text,
 				Indent: t.Indent,
+				Line:   t.Line,
+				Column: t.Column,
 			})
 		}
 	}
 }
 
+// error returns an error message prefixed with the line and column number of
+// where in the template the error occured.
 func (p *parser) error(ln, col int, msg string) error {
 	var b strings.Builder
 	b.WriteString(p.name)
@@ -128,6 +147,7 @@ func (p *parser) error(ln, col int, msg string) error {
 	return errors.New(b.String())
 }
 
+// splitKey splits a dotted key into a slice of keys.
 func splitKey(key string) []string {
 	if key == "." {
 		return []string{"."}

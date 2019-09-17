@@ -1,8 +1,4 @@
-// Copyright 2019 Erik Lott. All rights reserved.
-// Use of this source code is governed by a MIT
-// license that can be found in the LICENSE file.
-
-package render
+package mustache
 
 import (
 	"fmt"
@@ -20,95 +16,93 @@ const maxPartialDepth = 100000
 
 // renderer represents the state of the rendering of a single template.
 type renderer struct {
-	b                strings.Builder
-	indent           string
-	indentNext       bool
-	contexts         []reflect.Value
-	treeMap          map[string]*ast.Tree
-	depth            int //the height of the stack of executing partials
-	errOnContextMiss bool
+	template *Template       // the template that initiated the render
+	stack    []reflect.Value // the context stack
+	depth    int             // the depth of executing partials
+
+	// write fields
+	w          strings.Builder // the writer
+	indent     string          // the current indent string
+	indentNext bool            // when true, apply indent before next write
 }
 
-// Render transforms a tree of nodes into a rendered string template.
-func Render(tree *ast.Tree, treeMap map[string]*ast.Tree, contexts []interface{}) (string, error) {
-	var reversedContexts []reflect.Value
-	for i := len(contexts) - 1; i >= 0; i-- {
-		c := reflect.ValueOf(contexts[i])
-		reversedContexts = append(reversedContexts, c)
-	}
-	return render(tree, treeMap, reversedContexts)
+// newRenderer returns a newly initialized renderer.
+func (t *Template) newRenderer() *renderer {
+	return &renderer{template: t}
 }
 
-// render transforms a template tree into a final rendered string template. The context stack
-// provided should be in reverse order.
-func render(tree *ast.Tree, treeMap map[string]*ast.Tree, contexts []reflect.Value) (string, error) {
-	r := &renderer{
-		indentNext: true,
-		contexts:   contexts,
-		treeMap:    treeMap,
+func (r *renderer) String() string {
+	return r.w.String()
+}
+
+// renderToString sub-renders a tree into a string. If an error occurs,
+// rendering stops and the error is returned.
+func (r *renderer) renderToString(tree *ast.Tree) (string, error) {
+	subRenderer := &renderer{
+		template:   r.template,
+		stack:      r.stack,
+		depth:      0,
+		w:          strings.Builder{},
+		indent:     "",
+		indentNext: false,
 	}
-	err := r.renderNode(tree.Name, tree)
-	return r.b.String(), err
+	err := subRenderer.walk(tree.Name, tree)
+	s := subRenderer.String()
+
+	// the subRenderer may have pushed and popped enough contexts onto the stack
+	// to cause the slice to allocate to a new larger underlaying array. If this
+	// has happened, we want to keep the pointer to that larger array to minimize
+	// allocations.
+	r.stack = subRenderer.stack
+
+	return s, err
 }
 
 // write a string to the template output.
-func (r *renderer) write(s string) {
+func (r *renderer) write(s string, unescaped bool) {
 	if r.indentNext {
 		r.indentNext = false
-		r.b.WriteString(r.indent)
+		r.w.WriteString(r.indent)
 	}
-	r.b.WriteString(s)
-}
-
-// write an html escaped string the the template output.
-func (r *renderer) escapedWrite(s string) {
-	r.write(html.EscapeString(s))
-}
-
-// increaseIndent concatenate an string of whitespace to any existing indent.
-func (r *renderer) increaseIndent(s string) {
-	r.indent += s
-}
-
-// decreaseIndent removes a previously appended indent.
-func (r *renderer) decreaseIndent(i string) {
-	r.indent = r.indent[:len(r.indent)-len(i)]
-}
-
-// indentNextWrite instructs the writer to add an indent before writing the next
-// string to the template output.
-func (r *renderer) indentNextWrite() {
-	r.indentNext = true
+	if !unescaped {
+		s = html.EscapeString(s)
+	}
+	r.w.WriteString(s)
 }
 
 // conceptually shifts a context onto the stack. Since the stack is actually in
 // reverse order, the context is pushed.
-func (r *renderer) addContext(context reflect.Value) {
-	r.contexts = append(r.contexts, context)
+func (r *renderer) push(context reflect.Value) {
+	r.stack = append(r.stack, context)
 }
 
 // conceptually unshifts a context onto the stack. Since the stack is actually in
 // reverse order, the context is popped.
-func (r *renderer) removeContext() {
-	r.contexts = r.contexts[:len(r.contexts)-1]
+func (r *renderer) pop() reflect.Value {
+	if len(r.stack) == 0 {
+		return reflect.Value{}
+	}
+	ctx := r.stack[len(r.stack)-1]
+	r.stack = r.stack[:len(r.stack)-1]
+	return ctx
 }
 
 // render recursively walks each node of the tree, incrementally building the template
 // string output.
-func (r *renderer) renderNode(treeName string, node interface{}) error {
+func (r *renderer) walk(treeName string, node interface{}) error {
 	switch t := node.(type) {
 	case *ast.Tree:
 		for i := range t.Nodes {
-			err := r.renderNode(treeName, t.Nodes[i])
+			err := r.walk(treeName, t.Nodes[i])
 			if err != nil {
 				return err
 			}
 		}
 
 	case *ast.Text:
-		r.write(t.Text)
+		r.write(t.Text, true)
 		if t.EndOfLine {
-			r.indentNextWrite()
+			r.indentNext = true
 		}
 
 	case *ast.Variable:
@@ -120,11 +114,7 @@ func (r *renderer) renderNode(treeName string, node interface{}) error {
 		if err != nil {
 			return err
 		}
-		if t.Unescaped {
-			r.write(s)
-		} else {
-			r.escapedWrite(s)
-		}
+		r.write(s, t.Unescaped)
 
 	case *ast.Section:
 		v, err := r.lookup(treeName, t.Line, t.Column, t.Key)
@@ -140,14 +130,14 @@ func (r *renderer) renderNode(treeName string, node interface{}) error {
 			switch v.Kind() {
 			case reflect.Slice, reflect.Array:
 				for i := 0; i < v.Len(); i++ {
-					r.addContext(v.Index(i))
+					r.push(v.Index(i))
 					for j := range t.Nodes {
-						err := r.renderNode(treeName, t.Nodes[j])
+						err := r.walk(treeName, t.Nodes[j])
 						if err != nil {
 							return err
 						}
 					}
-					r.removeContext()
+					r.pop()
 				}
 			case reflect.Func:
 				s := v.Call([]reflect.Value{reflect.ValueOf(t.Text)})[0].String()
@@ -155,24 +145,24 @@ func (r *renderer) renderNode(treeName string, node interface{}) error {
 				if err != nil {
 					return nil
 				}
-				err = r.renderNode(treeName, tree)
+				err = r.walk(treeName, tree)
 				if err != nil {
 					return err
 				}
 
 			default:
-				r.addContext(v)
+				r.push(v)
 				for i := range t.Nodes {
-					err := r.renderNode(treeName, t.Nodes[i])
+					err := r.walk(treeName, t.Nodes[i])
 					if err != nil {
 						return err
 					}
 				}
-				r.removeContext()
+				r.pop()
 			}
 		} else if t.Inverted && !isTruthy {
 			for i := range t.Nodes {
-				err := r.renderNode(treeName, t.Nodes[i])
+				err := r.walk(treeName, t.Nodes[i])
 				if err != nil {
 					return err
 				}
@@ -180,99 +170,34 @@ func (r *renderer) renderNode(treeName string, node interface{}) error {
 		}
 
 	case *ast.Partial:
-		tree, ok := r.treeMap[t.Key]
-		if !ok && r.errOnContextMiss {
+		tree, ok := r.template.treeMap[t.Key]
+		if !ok {
+			if r.template.ContextErrorsEnabled {
+				return fmt.Errorf("%s:%d:%d: partial not found: %s", treeName, t.Line, t.Column, t.Key)
+			}
 			return nil
 		}
-		r.increaseIndent(t.Indent)
-		r.indentNextWrite()
+
+		origIndent := r.indent
+		r.indent += t.Indent
+
+		r.indentNext = true
+
 		r.depth++
-		if r.depth == maxPartialDepth {
+		if r.depth >= maxPartialDepth {
 			return fmt.Errorf("exceeded maximum partial depth: %d", maxPartialDepth)
 		}
-		err := r.renderNode(tree.Name, tree)
+
+		err := r.walk(tree.Name, tree)
 		if err != nil {
 			return err
 		}
+
 		r.depth--
-		r.decreaseIndent(t.Indent)
+
+		r.indent = origIndent
 	}
 	return nil
-}
-
-// lookup a key in the context stack. If a value was not found, the reflect zero
-// type is returned.
-func (r *renderer) lookup(name string, ln, col int, key []string) (reflect.Value, error) {
-	v := lookupKeysContexts(key, r.contexts)
-	if !v.IsValid() && r.errOnContextMiss {
-		return v, fmt.Errorf("%s:%d:%d: cannot find value %s in context", name, ln, col, strings.Join(key, "."))
-	}
-	return v, nil
-}
-
-// lookupKeysContexts obtains a value for a dotted key - eg: a.b.c . If a value
-// was not found, the reflect zero type is returned.
-func lookupKeysContexts(key []string, contexts []reflect.Value) reflect.Value {
-	var v reflect.Value
-
-	if len(key) == 0 {
-		return v
-	}
-
-	for i := range key {
-		if i == 0 {
-			v = lookupContexts(key[i], contexts)
-			continue
-		}
-		v = lookup(key[i], v)
-		if !v.IsValid() {
-			break
-		}
-	}
-	return v
-}
-
-// lookupContexts returns a value from the first context in the stack that
-// contains a value for that key. If a value was not found, the reflect zero
-// type is returned.
-func lookupContexts(key string, contexts []reflect.Value) reflect.Value {
-	var v reflect.Value
-	for i := len(contexts) - 1; i >= 0; i-- {
-		ctx := contexts[i]
-		v = lookup(key, ctx)
-		if v.IsValid() {
-			break
-		}
-	}
-	return v
-}
-
-// lookup returns a value by key from the context. If a value
-// was not found, the reflect zero type is returned.
-func lookup(key string, ctx reflect.Value) reflect.Value {
-	if key == "." {
-		return ctx
-	}
-
-	// check context for method by name
-	if ctx.IsValid() {
-		method := ctx.MethodByName(key)
-		if method.IsValid() {
-			return method
-		}
-	}
-
-	// check for fields and keys on concrete types.
-	switch ctx.Kind() {
-	case reflect.Ptr, reflect.Interface:
-		return lookup(key, indirect(ctx))
-	case reflect.Map:
-		return ctx.MapIndex(reflect.ValueOf(key))
-	case reflect.Struct:
-		return ctx.FieldByName(key)
-	default:
-		return reflect.Value{}
-	}
 }
 
 // toString transforms a reflect.Value into a string.
@@ -309,7 +234,7 @@ func (r *renderer) toString(v reflect.Value, ldelim, rdelim string) (string, err
 		if err != nil {
 			return "", err
 		}
-		s, err := render(tree, r.treeMap, r.contexts)
+		s, err := r.renderToString(tree)
 		if err != nil {
 			return "", err
 		}
@@ -324,21 +249,6 @@ func (r *renderer) toString(v reflect.Value, ldelim, rdelim string) (string, err
 	default:
 		return fmt.Sprintf("%v", v.Interface()), nil
 	}
-}
-
-func indirect(v reflect.Value) reflect.Value {
-loop:
-	for v.IsValid() {
-		switch av := v; av.Kind() {
-		case reflect.Ptr:
-			v = av.Elem()
-		case reflect.Interface:
-			v = av.Elem()
-		default:
-			break loop
-		}
-	}
-	return v
 }
 
 // isSectionTruthy returns a value when the section is truthy. Returns the
@@ -381,7 +291,7 @@ func (r *renderer) isSectionTruthy(v reflect.Value) (bool, error) {
 			if err != nil {
 				return false, nil
 			}
-			s, err := render(tree, r.treeMap, r.contexts)
+			s, err := r.renderToString(tree)
 			if err != nil {
 				return false, err
 			}
@@ -400,5 +310,97 @@ func (r *renderer) isSectionTruthy(v reflect.Value) (bool, error) {
 		return false, nil
 	default:
 		return false, nil
+	}
+}
+
+// indirect returns the value that v points to, or concrete
+// element underlying an interface.
+func indirect(v reflect.Value) reflect.Value {
+loop:
+	for v.IsValid() {
+		switch av := v; av.Kind() {
+		case reflect.Ptr:
+			v = av.Elem()
+		case reflect.Interface:
+			v = av.Elem()
+		default:
+			break loop
+		}
+	}
+	return v
+}
+
+// lookup a key in the context stack. If a value was not found, the reflect.Value zero
+// type is returned.
+func (r *renderer) lookup(name string, ln, col int, key []string) (reflect.Value, error) {
+	v := lookupKeysStack(key, r.stack)
+	if !v.IsValid() && r.template.ContextErrorsEnabled {
+		return v, fmt.Errorf("%s:%d:%d: cannot find value %s in context", name, ln, col, strings.Join(key, "."))
+	}
+	return v, nil
+}
+
+// lookupKeysStack obtains a value for a dotted key - eg: a.b.c . If a value
+// was not found, the reflect.Value zero type is returned.
+func lookupKeysStack(key []string, contexts []reflect.Value) reflect.Value {
+	var v reflect.Value
+
+	if len(key) == 0 {
+		return v
+	}
+
+	for i := range key {
+		if i == 0 {
+			v = lookupKeyStack(key[i], contexts)
+			continue
+		}
+		v = lookupKeyContext(key[i], v)
+		if !v.IsValid() {
+			break
+		}
+	}
+	return v
+}
+
+// lookupKeyStack returns a value from the first context in the stack that
+// contains a value for that key. If a value was not found, the reflect.Value zero
+// type is returned.
+func lookupKeyStack(key string, contexts []reflect.Value) reflect.Value {
+	var v reflect.Value
+	for i := len(contexts) - 1; i >= 0; i-- {
+		ctx := contexts[i]
+		v = lookupKeyContext(key, ctx)
+		if v.IsValid() {
+			break
+		}
+	}
+	return v
+}
+
+// lookup returns a value by key from the context. If a value
+// was not found, the reflect.Value zero type is returned.
+func lookupKeyContext(key string, ctx reflect.Value) reflect.Value {
+	if key == "." {
+		return ctx
+	}
+
+	// check context for method by name
+	if ctx.IsValid() {
+		method := ctx.MethodByName(key)
+		if method.IsValid() {
+			return method
+		}
+	}
+
+	// check for fields and keys on concrete types.
+	switch ctx.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		return lookupKeyContext(key, indirect(ctx))
+	case reflect.Map:
+		return ctx.MapIndex(reflect.ValueOf(key))
+	case reflect.Struct:
+		return ctx.FieldByName(key)
+	default:
+		return reflect.Value{}
 	}
 }
