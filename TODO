@@ -1,0 +1,2 @@
+- Use single position int that can be expanded to line, column, rather that using 3 distinct values.
+    https://golang.org/src/go/token/position.go?s=2521:2533#L66
