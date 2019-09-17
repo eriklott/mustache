@@ -4,68 +4,89 @@
 
 package ast
 
-// Node represents a node in the ast tree. Only constructs implementing
-// the Node inteface in this package can be added as child nodes.
-type Node interface {
-	node()
-}
+import "strings"
 
-// Tree is the representation of a single parsed template.
-type Tree struct {
-	Name  string
-	Nodes []Node
-}
+type NodeType int
 
-// Add appends a child node to the Tree.
-func (t *Tree) Add(node Node) {
-	t.Nodes = append(t.Nodes, node)
-}
+const (
+	Tree NodeType = iota
+	Text
+	TextEOF
+	Variable
+	UnescapedVariable
+	Section
+	InvertedSection
+	Partial
+)
 
-// Text node represents text exising between mustache tags.
-// When EndOfLine is true, the text string is guaranteed to end with
-// with \n or \r\n.
-type Text struct {
-	Text      string
-	EndOfLine bool
-}
-
-func (t *Text) node() {}
-
-// Variable represents a mustache variable tag.
-type Variable struct {
-	Key       []string
-	Unescaped bool
-	Line      int
-	Column    int
-}
-
-func (v *Variable) node() {}
-
-// Section a mustache section tag.
-type Section struct {
-	Key      []string
-	Inverted bool
-	LDelim   string
-	RDelim   string
-	Text     string
-	Nodes    []Node
-	Line     int
-	Column   int
-}
-
-// Add appends a child node to the Section.
-func (s *Section) Add(node Node) {
-	s.Nodes = append(s.Nodes, node)
-}
-
-func (s *Section) node() {}
-
-// Partial represents a mustache partial tag.
-type Partial struct {
-	Key    string
-	Indent string
+type Node struct {
+	Type   NodeType
+	V1     string
+	V2     string
+	V3     string
 	Line   int
 	Column int
+	Nodes  []Node
 }
 
-func (p *Partial) node() {}
+func (n Node) IsTree() bool {
+	return n.Type == Tree
+}
+
+func (n Node) IsText() bool {
+	return n.Type == Text || n.Type == TextEOF
+}
+
+func (n Node) IsEndOfLine() bool {
+	return n.Type == TextEOF
+}
+
+func (n Node) IsVariable() bool {
+	return n.Type == Variable || n.Type == UnescapedVariable
+}
+
+func (n Node) IsUnescaped() bool {
+	return n.Type == UnescapedVariable
+}
+
+func (n Node) IsSection() bool {
+	return n.Type == Section || n.Type == InvertedSection
+}
+
+func (n Node) IsInverted() bool {
+	return n.Type == InvertedSection
+}
+
+func (n Node) IsPartial() bool {
+	return n.Type == Partial
+}
+
+// Text
+
+func (n Node) Text() string {
+	return n.V1
+}
+
+func (n Node) Key() string {
+	return n.V1
+}
+
+func (n Node) Name() string {
+	return n.V1
+}
+
+func (n Node) Delims() (string, string) {
+	parts := strings.Split(n.V2, " ")
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "", ""
+}
+
+func (n Node) SectionText() string {
+	return n.V3
+}
+
+func (n Node) Indent() string {
+	return n.V2
+}

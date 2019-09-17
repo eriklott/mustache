@@ -14,14 +14,14 @@ import (
 
 // Template is the representation of a parsed template.
 type Template struct {
-	treeMap              map[string]*ast.Tree
+	treeMap              map[string]ast.Node
 	ContextErrorsEnabled bool
 }
 
 // NewTemplate allocates a new template.
 func NewTemplate() *Template {
 	t := &Template{
-		treeMap: make(map[string]*ast.Tree),
+		treeMap: make(map[string]ast.Node),
 	}
 	return t
 }
@@ -55,7 +55,7 @@ func (t *Template) Render(name string, contexts ...interface{}) (string, error) 
 		r.push(context)
 	}
 
-	err := r.walk(tree.Name, tree)
+	err := r.walk(tree.V1, tree)
 	s := r.String()
 	return s, err
 }

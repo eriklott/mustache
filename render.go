@@ -3,6 +3,7 @@ package mustache
 import (
 	"fmt"
 	"html"
+	"log"
 	"math"
 	"reflect"
 	"strconv"
@@ -12,7 +13,7 @@ import (
 	"github.com/eriklott/mustache/internal/parse"
 )
 
-const maxPartialDepth = 100000
+const maxPartialDepth = 10000
 
 // renderer represents the state of the rendering of a single template.
 type renderer struct {
@@ -37,7 +38,7 @@ func (r *renderer) String() string {
 
 // renderToString sub-renders a tree into a string. If an error occurs,
 // rendering stops and the error is returned.
-func (r *renderer) renderToString(tree *ast.Tree) (string, error) {
+func (r *renderer) renderToString(tree ast.Node) (string, error) {
 	subRenderer := &renderer{
 		template:   r.template,
 		stack:      r.stack,
@@ -46,7 +47,7 @@ func (r *renderer) renderToString(tree *ast.Tree) (string, error) {
 		indent:     "",
 		indentNext: false,
 	}
-	err := subRenderer.walk(tree.Name, tree)
+	err := subRenderer.walk(tree.Name(), tree)
 	s := subRenderer.String()
 
 	// the subRenderer may have pushed and popped enough contexts onto the stack
@@ -89,24 +90,24 @@ func (r *renderer) pop() reflect.Value {
 
 // render recursively walks each node of the tree, incrementally building the template
 // string output.
-func (r *renderer) walk(treeName string, node interface{}) error {
-	switch t := node.(type) {
-	case *ast.Tree:
-		for i := range t.Nodes {
-			err := r.walk(treeName, t.Nodes[i])
+func (r *renderer) walk(treeName string, node ast.Node) error {
+	switch {
+	case node.IsTree():
+		for i := range node.Nodes {
+			err := r.walk(treeName, node.Nodes[i])
 			if err != nil {
 				return err
 			}
 		}
 
-	case *ast.Text:
-		r.write(t.Text, true)
-		if t.EndOfLine {
+	case node.IsText():
+		r.write(node.Text(), true)
+		if node.IsEndOfLine() {
 			r.indentNext = true
 		}
 
-	case *ast.Variable:
-		v, err := r.lookup(treeName, t.Line, t.Column, t.Key)
+	case node.IsVariable():
+		v, err := r.lookup(treeName, node.Line, node.Column, splitKey(node.Key()))
 		if err != nil {
 			return err
 		}
@@ -114,10 +115,10 @@ func (r *renderer) walk(treeName string, node interface{}) error {
 		if err != nil {
 			return err
 		}
-		r.write(s, t.Unescaped)
+		r.write(s, node.IsUnescaped())
 
-	case *ast.Section:
-		v, err := r.lookup(treeName, t.Line, t.Column, t.Key)
+	case node.IsSection():
+		v, err := r.lookup(treeName, node.Line, node.Column, splitKey(node.Key()))
 		if err != nil {
 			return err
 		}
@@ -126,13 +127,13 @@ func (r *renderer) walk(treeName string, node interface{}) error {
 		if err != nil {
 			return err
 		}
-		if !t.Inverted && isTruthy {
+		if !node.IsInverted() && isTruthy {
 			switch v.Kind() {
 			case reflect.Slice, reflect.Array:
 				for i := 0; i < v.Len(); i++ {
 					r.push(v.Index(i))
-					for j := range t.Nodes {
-						err := r.walk(treeName, t.Nodes[j])
+					for j := range node.Nodes {
+						err := r.walk(treeName, node.Nodes[j])
 						if err != nil {
 							return err
 						}
@@ -140,8 +141,9 @@ func (r *renderer) walk(treeName string, node interface{}) error {
 					r.pop()
 				}
 			case reflect.Func:
-				s := v.Call([]reflect.Value{reflect.ValueOf(t.Text)})[0].String()
-				tree, err := parse.Parse("lambda", s, t.LDelim, t.RDelim)
+				s := v.Call([]reflect.Value{reflect.ValueOf(node.SectionText())})[0].String()
+				ldelim, rdelim := node.Delims()
+				tree, err := parse.Parse("lambda", s, ldelim, rdelim)
 				if err != nil {
 					return nil
 				}
@@ -152,43 +154,44 @@ func (r *renderer) walk(treeName string, node interface{}) error {
 
 			default:
 				r.push(v)
-				for i := range t.Nodes {
-					err := r.walk(treeName, t.Nodes[i])
+				for i := range node.Nodes {
+					err := r.walk(treeName, node.Nodes[i])
 					if err != nil {
 						return err
 					}
 				}
 				r.pop()
 			}
-		} else if t.Inverted && !isTruthy {
-			for i := range t.Nodes {
-				err := r.walk(treeName, t.Nodes[i])
+		} else if node.IsInverted() && !isTruthy {
+			for i := range node.Nodes {
+				err := r.walk(treeName, node.Nodes[i])
 				if err != nil {
 					return err
 				}
 			}
 		}
 
-	case *ast.Partial:
-		tree, ok := r.template.treeMap[t.Key]
+	case node.IsPartial():
+		tree, ok := r.template.treeMap[node.Key()]
 		if !ok {
 			if r.template.ContextErrorsEnabled {
-				return fmt.Errorf("%s:%d:%d: partial not found: %s", treeName, t.Line, t.Column, t.Key)
+				return fmt.Errorf("%s:%d:%d: partial not found: %s", treeName, node.Line, node.Column, node.Key())
 			}
 			return nil
 		}
 
 		origIndent := r.indent
-		r.indent += t.Indent
+		r.indent += node.Indent()
 
 		r.indentNext = true
 
 		r.depth++
+		log.Print(strconv.Itoa(r.depth))
 		if r.depth >= maxPartialDepth {
 			return fmt.Errorf("exceeded maximum partial depth: %d", maxPartialDepth)
 		}
 
-		err := r.walk(tree.Name, tree)
+		err := r.walk(tree.Name(), tree)
 		if err != nil {
 			return err
 		}
@@ -403,4 +406,12 @@ func lookupKeyContext(key string, ctx reflect.Value) reflect.Value {
 	default:
 		return reflect.Value{}
 	}
+}
+
+// splitKey splits a dotted key into a slice of keys.
+func splitKey(key string) []string {
+	if key == "." {
+		return []string{"."}
+	}
+	return strings.Split(key, ".")
 }

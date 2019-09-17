@@ -29,17 +29,17 @@ type parser struct {
 
 // Parse transforms a template string into a tree of nodes. If an error is
 // encountered, parsing stops and the error is returned.
-func Parse(name, src, leftDelim, rightDelim string) (*ast.Tree, error) {
+func Parse(name, src, leftDelim, rightDelim string) (ast.Node, error) {
 	p := &parser{
 		name: name,
 		src:  src,
 		s:    token.NewScanner(name, src, leftDelim, rightDelim),
 	}
-	tree := &ast.Tree{
-		Name: name,
+	tree := ast.Node{
+		Type: ast.Tree,
+		V1:   name,
 	}
-	err := p.parse(tree, 0)
-	return tree, err
+	return p.parse(tree, 0)
 }
 
 // parentNode represents an element that can add an ast.Node (mainly a ast.Tree or ast.Section)
@@ -49,82 +49,89 @@ type parentNode interface {
 
 // parse recursively parses the template string, constructing nodes and adding them to
 // the tree. If an error is encountered, parse stops and the error is returned.
-func (p *parser) parse(parent parentNode, start int) error {
+func (p *parser) parse(parent ast.Node, start int) (ast.Node, error) {
 	for {
 		t, err := p.s.Next()
 		if err == io.EOF {
 			// If the eof has been reached while parsing the inside of a section, return
 			// the eof error to the calling function so the error can be handled there.
-			if _, ok := parent.(*ast.Section); ok {
-				return err
+			if parent.IsSection() {
+				return parent, err
 			}
 
 			// eof reached normally. parsing is complete.
-			return nil
+			return parent, nil
 		}
 		if err != nil {
-			return err
+			return parent, err
 		}
 
 		switch t.Type {
 		case token.TEXT:
-			parent.Add(&ast.Text{
-				Text:      t.Text,
-				EndOfLine: false,
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:   ast.Text,
+				V1:     t.Text,
+				Line:   t.Line,
+				Column: t.Column,
 			})
 
 		case token.TEXT_EOL:
-			parent.Add(&ast.Text{
-				Text:      t.Text,
-				EndOfLine: true,
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:   ast.TextEOF,
+				V1:     t.Text,
+				Line:   t.Line,
+				Column: t.Column,
 			})
 
 		case token.VARIABLE:
-			parent.Add(&ast.Variable{
-				Key:       splitKey(t.Text),
-				Unescaped: false,
-				Line:      t.Line,
-				Column:    t.Column,
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:   ast.Variable,
+				V1:     t.Text,
+				Line:   t.Line,
+				Column: t.Column,
 			})
 
 		case token.UNESCAPED_VARIABLE, token.UNESCAPED_VARIABLE_SYM:
-			parent.Add(&ast.Variable{
-				Key:       splitKey(t.Text),
-				Unescaped: true,
-				Line:      t.Line,
-				Column:    t.Column,
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:   ast.UnescapedVariable,
+				V1:     t.Text,
+				Line:   t.Line,
+				Column: t.Column,
 			})
 
 		case token.SECTION, token.INVERTED_SECTION:
-			node := &ast.Section{
-				Key:      splitKey(t.Text),
-				Inverted: t.Type == token.INVERTED_SECTION,
-				LDelim:   p.s.LeftDelim(),
-				RDelim:   p.s.RightDelim(),
-				Line:     t.Line,
-				Column:   t.Column,
+			typ := ast.Section
+			if t.Type == token.INVERTED_SECTION {
+				typ = ast.InvertedSection
 			}
-			err := p.parse(node, t.EndOffset)
+			node := ast.Node{
+				Type:   typ,
+				V1:     t.Text,
+				V2:     p.s.LeftDelim() + " " + p.s.RightDelim(),
+				Line:   t.Line,
+				Column: t.Column,
+			}
+			node, err = p.parse(node, t.EndOffset)
 			if err == io.EOF {
-				return p.error(t.Line, t.Column, "unclosed section tag: "+t.Text)
+				return parent, p.error(t.Line, t.Column, "unclosed section tag: "+t.Text)
 			}
 			if err != nil {
-				return err
+				return parent, err
 			}
-			parent.Add(node)
+			parent.Nodes = append(parent.Nodes, node)
 
 		case token.SECTION_END:
-			section, ok := parent.(*ast.Section)
-			if !ok || strings.Join(section.Key, ".") != t.Text {
-				return p.error(t.Line, t.Column, "unexpected section closing tag: "+t.Text)
+			if !parent.IsSection() || parent.Key() != t.Text {
+				return parent, p.error(t.Line, t.Column, "unexpected section closing tag: "+t.Text)
 			}
-			section.Text = p.src[start:t.Offset]
-			return nil
+			parent.V3 = p.src[start:t.Offset]
+			return parent, nil
 
 		case token.PARTIAL:
-			parent.Add(&ast.Partial{
-				Key:    t.Text,
-				Indent: t.Indent,
+			parent.Nodes = append(parent.Nodes, ast.Node{
+				Type:   ast.Partial,
+				V1:     t.Text,
+				V2:     t.Indent,
 				Line:   t.Line,
 				Column: t.Column,
 			})
@@ -145,12 +152,4 @@ func (p *parser) error(ln, col int, msg string) error {
 	b.WriteString(" ")
 	b.WriteString(msg)
 	return errors.New(b.String())
-}
-
-// splitKey splits a dotted key into a slice of keys.
-func splitKey(key string) []string {
-	if key == "." {
-		return []string{"."}
-	}
-	return strings.Split(key, ".")
 }
