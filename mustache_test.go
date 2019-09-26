@@ -221,45 +221,83 @@ func TestRender_SpecLambda(t *testing.T) {
 	}
 }
 
-type testStructContext struct {
-	v1 string
-	v2 int
+type testStruct struct {
 }
 
-func (s testStructContext) StringVal() string {
-	return s.v1
+func (s testStruct) Arity0() string {
+	return "Hello World!"
 }
 
-func (s testStructContext) IntVal() int {
-	return s.v2
+func (s testStruct) Arity1(text string) string {
+	return "--" + text + "--"
 }
 
-func TestRender_Methods(t *testing.T) {
-	tmpl := mustache.NewTemplate()
-	err := tmpl.Parse("main", "{{StringVal}},{{IntVal}}")
-	if err != nil {
-		t.Fatalf("failed to parse template: %v", err)
+func TestRender_Misc(t *testing.T) {
+	tt := []struct {
+		name     string
+		desc     string
+		text     string
+		data     interface{}
+		partials map[string]string
+		want     string
+		err      string
+	}{
+		{
+			name: "Method",
+			desc: "Struct methods are treated as lambdas",
+			text: "{{Arity0}},{{#Arity1}}Hello Again!{{/Arity1}}",
+			data: testStruct{},
+			want: "Hello World!,--Hello Again!--",
+		},
+		{
+			name: "Section - Lambda",
+			desc: "An arity 0 function can be used as section data",
+			text: "{{#A}}Hello World!{{/A}}",
+			data: map[string]interface{}{
+				"A": func() bool { return true },
+			},
+			want: "Hello World!",
+		},
+		{
+			name:     "Recursive Partial",
+			desc:     "Infinitely recursive partials will return an error",
+			text:     "{{>partial}}",
+			partials: map[string]string{"partial": "{{>partial}}"},
+			data:     nil,
+			err:      "exceeded maximum partial depth: 100000",
+		},
 	}
-	got, err := tmpl.Render("main", testStructContext{"1", 2})
-	if err != nil {
-		t.Fatalf("failed to render template: %v", err)
-	}
-	want := "1,2"
-	if got != want {
-		t.Errorf("unexpected response, got: '%s', want: '%s'", got, want)
-	}
-}
 
-func TestRender_InfinitePartialRecursion(t *testing.T) {
-	tmpl := mustache.NewTemplate()
-	err := tmpl.Parse("main", "{{>main}}")
-	if err != nil {
-		t.Fatalf("failed to parse template: %v", err)
-	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := mustache.NewTemplate()
+			err := tmpl.Parse("main", tc.text)
+			if err != nil {
+				t.Fatalf("failed to parse template: %v", err)
+			}
+			for key, partial := range tc.partials {
+				err := tmpl.Parse(key, partial)
+				if err != nil {
+					t.Fatalf("failed to parse partial: %v", err)
+				}
+			}
 
-	_, err = tmpl.Render("main")
-	if err == nil {
-		t.Error("expected infinite partial recursion error, got none")
+			got, err := tmpl.Render("main", tc.data)
+			var errStr string
+			if err != nil {
+				errStr = err.Error()
+			}
+			if errStr != tc.err {
+				t.Errorf("unexpected error, got:%s, want:%s", errStr, tc.err)
+			}
+			if err != nil || tc.err != "" {
+				return
+			}
+
+			if got != tc.want {
+				t.Errorf("unexpected response, got:%s, want:%s", got, tc.want)
+			}
+		})
 	}
 }
 

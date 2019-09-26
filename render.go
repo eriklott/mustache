@@ -121,11 +121,11 @@ func (r *renderer) walk(treeName string, node interface{}) error {
 		if err != nil {
 			return err
 		}
-		v = indirect(v)
-		isTruthy, err := r.isSectionTruthy(v)
+		v, err = r.toTruthyValue(v)
 		if err != nil {
 			return err
 		}
+		isTruthy := v.IsValid()
 		if !t.Inverted && isTruthy {
 			switch v.Kind() {
 			case reflect.Slice, reflect.Array:
@@ -251,65 +251,85 @@ func (r *renderer) toString(v reflect.Value, ldelim, rdelim string) (string, err
 	}
 }
 
-// isSectionTruthy returns a value when the section is truthy. Returns the
-// reflect zero value when the value is falsey.
-func (r *renderer) isSectionTruthy(v reflect.Value) (bool, error) {
+// toTruthyValue returns a value when it is "truthy". If the value is
+// falsey, the reflect zero value is returned.
+func (r *renderer) toTruthyValue(v reflect.Value) (reflect.Value, error) {
 	switch v.Kind() {
 	case reflect.Bool:
-		return v.Bool(), nil
+		if !v.Bool() {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		b := v.Int() != 0
-		return b, nil
+		if v.Int() == 0 {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		b := v.Uint() != 0
-		return b, nil
+		if v.Uint() == 0 {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.Float32, reflect.Float64:
-		b := math.Float64bits(v.Float()) != 0
-		return b, nil
+		if math.Float64bits(v.Float()) == 0 {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.Complex64, reflect.Complex128:
 		c := v.Complex()
-		b := !(math.Float64bits(real(c)) == 0 && math.Float64bits(imag(c)) == 0)
-		return b, nil
+		if math.Float64bits(real(c)) == 0 && math.Float64bits(imag(c)) == 0 {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.String:
-		b := v.Len() != 0
-		return b, nil
+		if v.Len() == 0 {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.Array, reflect.Slice:
-		b := !v.IsNil() && v.Len() > 0
-		return b, nil
+		if v.IsNil() || v.Len() == 0 {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.Func:
 		if v.IsNil() {
-			return false, nil
+			return reflect.Value{}, nil
 		}
 		t := v.Type()
 		isArity0 := t.NumIn() == 0 && t.NumOut() == 1
 		if isArity0 {
 			v = v.Call(nil)[0]
 			if v.Kind() != reflect.String {
-				return r.isSectionTruthy(v)
+				return r.toTruthyValue(v)
 			}
 			tree, err := parse.Parse("lambda", v.String(), parse.DefaultLeftDelim, parse.DefaultRightDelim)
 			if err != nil {
-				return false, nil
+				return reflect.Value{}, nil
 			}
 			s, err := r.renderToString(tree)
 			if err != nil {
-				return false, err
+				return reflect.Value{}, nil
 			}
-			return r.isSectionTruthy(reflect.ValueOf(s))
+			return r.toTruthyValue(reflect.ValueOf(s))
 		}
 		isArity1 := t.NumIn() == 1 && t.In(0).Kind() == reflect.String && t.NumOut() == 1 && t.Out(0).Kind() == reflect.String
-		return isArity1, nil
+		if isArity1 {
+			return v, nil
+		}
+		return reflect.Value{}, nil
 	case reflect.Ptr, reflect.Interface:
-		return r.isSectionTruthy(indirect(v))
+		return r.toTruthyValue(indirect(v))
 	case reflect.Map:
-		b := !v.IsNil()
-		return b, nil
+		if v.IsNil() {
+			return reflect.Value{}, nil
+		}
+		return v, nil
 	case reflect.Struct:
-		return true, nil
+		return v, nil
 	case reflect.Invalid:
-		return false, nil
+		return reflect.Value{}, nil
 	default:
-		return false, nil
+		return reflect.Value{}, nil
 	}
 }
 
